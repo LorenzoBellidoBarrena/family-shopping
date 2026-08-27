@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Lista de la compra",
+  "short_name": "La compra",
+  "description": "Lista de la compra familiar privada",
+  "lang": "es",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "start_url": "/",
+  "background_color": "#f2f5f3",
+  "theme_color": "#2c7a55",
+  "icons": [
+    {
+      "src": "icons/shopping-list.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/shopping-list-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

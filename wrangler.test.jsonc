@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "family-shopping-test",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-27",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "family-shopping-test-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "database/migrations",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "HOUSEHOLD_COORDINATOR", "class_name": "HouseholdCoordinator" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HouseholdCoordinator"] }],
+  "vars": {
+    "HOUSEHOLD_ACCESS_KEY": "integration-test-access-key",
+  },
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Lista de la compra">
+  <rect width="512" height="512" rx="112" fill="#2c7a55"/>
+  <path d="M126 153h48l35 186h181l34-128H194" fill="none" stroke="#fff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="235" cy="389" r="24" fill="#fff"/>
+  <circle cx="370" cy="389" r="24" fill="#fff"/>
+  <path d="m246 263 33 32 70-75" fill="none" stroke="#dff4e8" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

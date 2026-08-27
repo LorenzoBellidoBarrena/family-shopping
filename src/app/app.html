@@ -1,0 +1,522 @@
+<div class="app-shell">
+  <header class="app-header">
+    <span class="app-mark" aria-hidden="true">🛒</span>
+    <div>
+      <p class="eyebrow">Family Shopping</p>
+      <h1>Lista de la compra</h1>
+    </div>
+  </header>
+
+  <main>
+    @if (store.loading()) {
+      <section class="state-card" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <h2>Cargando la lista…</h2>
+        <p>Un momento, por favor.</p>
+      </section>
+    } @else if (!store.hasToken()) {
+      <section class="setup-card" aria-labelledby="setup-title">
+        @if (store.error()) {
+          <div class="error-banner" role="alert">
+            <span>{{ store.error() }}</span>
+            <button type="button" (click)="store.clearError()" aria-label="Cerrar aviso">×</button>
+          </div>
+        }
+        @if (incomingPairingCode()) {
+          <p class="status-pill">Invitación familiar</p>
+          <h2 id="setup-title">Vincular este móvil</h2>
+          <p class="supporting-text">
+            Confirma el código que aparece en el otro móvil para compartir la misma lista.
+          </p>
+          <div class="pairing-code pairing-code--compact" aria-label="Código de vinculación">
+            {{ incomingPairingCode() }}
+          </div>
+          <form (ngSubmit)="consumePairing()">
+            <label for="pairing-device-name">Nombre de este móvil <span>(opcional)</span></label>
+            <input
+              id="pairing-device-name"
+              name="pairingDeviceName"
+              [(ngModel)]="pairingDeviceName"
+            />
+            <button class="primary-button" type="submit" [disabled]="store.busy()">
+              {{ store.busy() ? 'Vinculando…' : 'Vincular móvil' }}
+            </button>
+          </form>
+        } @else {
+          <p class="status-pill">Primer acceso</p>
+          <h2 id="setup-title">Preparar este móvil</h2>
+          <p class="supporting-text">
+            Introduce la clave familiar una sola vez. Después este móvil quedará vinculado.
+          </p>
+          <form (ngSubmit)="submitSetup()">
+            <label for="access-key">Clave familiar</label>
+            <input
+              id="access-key"
+              name="accessKey"
+              type="password"
+              autocomplete="current-password"
+              required
+              [(ngModel)]="setupAccessKey"
+            />
+            <label for="household-name">Nombre del hogar <span>(opcional)</span></label>
+            <input id="household-name" name="householdName" [(ngModel)]="householdName" />
+            <label for="device-name">Nombre de este móvil <span>(opcional)</span></label>
+            <input id="device-name" name="deviceName" [(ngModel)]="deviceName" />
+            <button
+              class="primary-button"
+              type="submit"
+              [disabled]="store.busy() || !setupAccessKey"
+            >
+              {{ store.busy() ? 'Preparando…' : 'Empezar' }}
+            </button>
+          </form>
+        }
+      </section>
+    } @else if (view() === 'settings') {
+      <section class="settings-card" aria-labelledby="settings-title">
+        <button class="back-button" type="button" (click)="view.set('list')">← Volver</button>
+        <h2 id="settings-title">Ajustes</h2>
+        <div class="device-status">
+          <span aria-hidden="true">✓</span>
+          <div>
+            <strong>Este móvil está vinculado</strong>
+            <p>Puede acceder a la lista familiar.</p>
+          </div>
+        </div>
+        <div class="connection-summary">
+          <strong>Sincronización</strong>
+          <span>{{ store.offline() ? 'Sin conexión' : store.realtimeStatus() }}</span>
+        </div>
+        <button
+          class="primary-button"
+          type="button"
+          [disabled]="store.busy() || store.offline()"
+          (click)="createPairing()"
+        >
+          Añadir otro móvil
+        </button>
+        <p class="supporting-text">Se mostrará un QR y un código temporal para el nuevo móvil.</p>
+      </section>
+    } @else {
+      @if (store.error()) {
+        <div class="error-banner" role="alert">
+          <span>{{ store.error() }}</span>
+          <button type="button" (click)="store.clearError()" aria-label="Cerrar aviso">×</button>
+        </div>
+      }
+
+      @if (store.offline()) {
+        <div class="connection-banner connection-banner--offline" role="status">
+          <strong>Sin conexión</strong>
+          <span>
+            Lista guardada disponible. Puedes marcar productos
+            @if (store.pendingOperations() > 0) {
+              · {{ store.pendingOperations() }} cambio pendiente
+            }
+          </span>
+        </div>
+      } @else if (store.syncing()) {
+        <div class="connection-banner" role="status">
+          <strong>Sincronizando…</strong>
+          <span>Comprobando la versión guardada en el hogar.</span>
+        </div>
+      } @else if (store.realtimeStatus() === 'CONNECTING') {
+        <div class="connection-banner" role="status">
+          <strong>Conectando…</strong>
+          <span>La lista se actualizará automáticamente.</span>
+        </div>
+      }
+
+      <section class="add-card" aria-labelledby="add-title">
+        <h2 id="add-title">¿Qué falta?</h2>
+        <form (ngSubmit)="addQuickItem()">
+          <div class="quick-add-row">
+            <label class="visually-hidden" for="quick-name">Producto que falta</label>
+            <input
+              id="quick-name"
+              name="quickName"
+              placeholder="Por ejemplo, leche"
+              autocomplete="off"
+              maxlength="120"
+              [(ngModel)]="quickName"
+              (ngModelChange)="onQuickNameChange()"
+            />
+            <button
+              class="primary-button"
+              type="submit"
+              [disabled]="store.busy() || store.offline() || !quickName.trim()"
+            >
+              Añadir
+            </button>
+          </div>
+
+          @if (store.suggestions().length > 0) {
+            <div class="suggestions" aria-label="Sugerencias">
+              @for (suggestion of store.suggestions(); track suggestion.id) {
+                <button type="button" (click)="applySuggestion(suggestion)">
+                  <strong>{{ suggestion.name }}</strong>
+                  <span>
+                    {{ suggestion.quantity }}
+                    {{ formatUnit(suggestion.quantity, suggestion.unit) }} ·
+                    {{ store.supermarketName(suggestion.supermarketId) }}
+                  </span>
+                </button>
+              }
+            </div>
+          }
+
+          <button
+            class="details-toggle"
+            type="button"
+            [attr.aria-expanded]="quickDetailsOpen"
+            (click)="quickDetailsOpen = !quickDetailsOpen"
+          >
+            {{ quickDetailsOpen ? 'Ocultar detalles' : 'Ajustar cantidad y supermercado' }}
+          </button>
+
+          @if (quickDetailsOpen) {
+            <div class="details-grid">
+              <label>
+                Cantidad
+                <input
+                  name="quickQuantity"
+                  inputmode="decimal"
+                  pattern="[0-9]+([.,][0-9]{1,3})?"
+                  required
+                  [(ngModel)]="quickQuantity"
+                />
+              </label>
+              <label>
+                Unidad
+                <select name="quickUnit" [(ngModel)]="quickUnit">
+                  @for (unit of units; track unit) {
+                    <option [value]="unit">{{ unit }}</option>
+                  }
+                </select>
+              </label>
+              <label class="full-width">
+                Supermercado
+                <select name="quickSupermarket" [(ngModel)]="quickSupermarketId">
+                  <option value="">Sin supermercado</option>
+                  @for (supermarket of store.supermarkets(); track supermarket.id) {
+                    <option [value]="supermarket.id">{{ supermarket.name }}</option>
+                  }
+                </select>
+              </label>
+            </div>
+          }
+        </form>
+      </section>
+
+      @if (store.habits().length > 0) {
+        <section class="habits" aria-labelledby="habits-title">
+          <div class="section-heading">
+            <h2 id="habits-title">Habituales</h2>
+            <span>Añadir con un toque</span>
+          </div>
+          <div class="habit-list">
+            @for (habit of store.habits(); track habit.id) {
+              <button
+                type="button"
+                [disabled]="store.busy() || store.offline()"
+                (click)="addHabit(habit)"
+              >
+                <span aria-hidden="true">＋</span> {{ habit.name }}
+              </button>
+            }
+          </div>
+        </section>
+      }
+
+      <section class="shopping-section" aria-labelledby="shopping-title">
+        <div class="section-heading list-heading">
+          <div>
+            <h2 id="shopping-title">Tu lista</h2>
+            @if (store.items().length > 0) {
+              <span
+                >{{ store.pendingCount() }} pendientes · {{ store.items().length }} en total</span
+              >
+            }
+          </div>
+          @if (store.items().length > 0) {
+            <button
+              class="clear-button"
+              type="button"
+              [disabled]="store.offline()"
+              (click)="clearDialogOpen.set(true)"
+            >
+              Vaciar lista
+            </button>
+          }
+        </div>
+
+        @if (store.items().length === 0) {
+          <div class="empty-state">
+            <span aria-hidden="true">📝</span>
+            <h3>La lista está vacía</h3>
+            <p>Escribe arriba lo que falta y toca “Añadir”.</p>
+          </div>
+        } @else {
+          <ul class="shopping-list">
+            @for (item of store.items(); track item.id) {
+              <li [class.checked]="item.checked" [attr.data-item-id]="item.id">
+                <button
+                  class="check-button"
+                  type="button"
+                  [disabled]="store.busy()"
+                  [attr.aria-label]="
+                    item.checked ? 'Desmarcar ' + item.name : 'Marcar ' + item.name
+                  "
+                  [attr.aria-pressed]="item.checked"
+                  (click)="toggleItem(item)"
+                >
+                  <span aria-hidden="true">{{ item.checked ? '✓' : '' }}</span>
+                </button>
+                <div class="item-copy">
+                  <strong>{{ item.name }}</strong>
+                  <span>
+                    {{ item.quantity }} {{ formatUnit(item.quantity, item.unit) }} ·
+                    {{ store.supermarketName(item.supermarketId) }}
+                  </span>
+                </div>
+                <button
+                  class="edit-button"
+                  type="button"
+                  [disabled]="store.offline()"
+                  (click)="openEditor(item)"
+                >
+                  Editar
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    }
+  </main>
+
+  @if (store.hasToken()) {
+    <nav aria-label="Navegación principal">
+      <button
+        type="button"
+        class="nav-item"
+        [class.nav-item--active]="view() === 'list'"
+        (click)="view.set('list')"
+      >
+        <span aria-hidden="true">☷</span> Lista
+      </button>
+      <button type="button" class="nav-item" disabled title="Próximamente">
+        <span aria-hidden="true">％</span> Ofertas
+      </button>
+      <button
+        type="button"
+        class="nav-item"
+        [class.nav-item--active]="view() === 'settings'"
+        (click)="view.set('settings')"
+      >
+        <span aria-hidden="true">⚙</span> Ajustes
+      </button>
+    </nav>
+  }
+</div>
+
+@if (pairingDetails(); as pairing) {
+  <div class="dialog-backdrop" role="presentation">
+    <section
+      class="dialog-card pairing-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="pairing-title"
+    >
+      <h2 id="pairing-title">Añadir otro móvil</h2>
+      @if (pairingSeconds() > 0) {
+        <p>Abre la cámara del nuevo móvil y escanea el QR, o introduce allí este código.</p>
+        @if (pairingQr(); as qr) {
+          <img class="pairing-qr" [src]="qr" alt="Código QR para vincular otro móvil" />
+        }
+        <div class="pairing-code" aria-label="Código de vinculación">{{ pairing.code }}</div>
+        <p class="pairing-countdown" aria-live="polite">
+          Caduca en {{ pairingSeconds() }} segundos
+        </p>
+      } @else {
+        <p>Este código ha caducado. Genera uno nuevo para continuar.</p>
+      }
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" (click)="closePairing()">Cerrar</button>
+        @if (pairingSeconds() === 0) {
+          <button
+            class="primary-button"
+            type="button"
+            [disabled]="store.busy()"
+            (click)="createPairing()"
+          >
+            Generar otro código
+          </button>
+        }
+      </div>
+    </section>
+  </div>
+}
+
+@if (editingItem(); as item) {
+  <div class="dialog-backdrop" role="presentation">
+    <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+      <h2 id="edit-title">Editar producto</h2>
+      <form (ngSubmit)="saveEdit()">
+        <label>
+          Nombre
+          <input name="editName" required maxlength="120" [(ngModel)]="editName" />
+        </label>
+        <div class="details-grid">
+          <label>
+            Cantidad
+            <input
+              name="editQuantity"
+              inputmode="decimal"
+              pattern="[0-9]+([.,][0-9]{1,3})?"
+              required
+              [(ngModel)]="editQuantity"
+            />
+          </label>
+          <label>
+            Unidad
+            <select name="editUnit" [(ngModel)]="editUnit">
+              @for (unit of units; track unit) {
+                <option [value]="unit">{{ unit }}</option>
+              }
+            </select>
+          </label>
+          <label class="full-width">
+            Supermercado
+            <select name="editSupermarket" [(ngModel)]="editSupermarketId">
+              <option value="">Sin supermercado</option>
+              @for (supermarket of store.supermarkets(); track supermarket.id) {
+                <option [value]="supermarket.id">{{ supermarket.name }}</option>
+              }
+            </select>
+          </label>
+        </div>
+        <div class="dialog-actions dialog-actions--split">
+          <button class="danger-text-button" type="button" (click)="requestDelete(item)">
+            Eliminar producto
+          </button>
+          <span class="action-group">
+            <button class="secondary-button" type="button" (click)="editingItem.set(null)">
+              Cancelar
+            </button>
+            <button
+              class="primary-button"
+              type="submit"
+              [disabled]="store.busy() || store.offline()"
+            >
+              Guardar
+            </button>
+          </span>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+
+@if (deletingItem(); as item) {
+  <div class="dialog-backdrop" role="presentation">
+    <section
+      class="dialog-card"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="delete-title"
+    >
+      <h2 id="delete-title">¿Eliminar {{ item.name }}?</h2>
+      <p>Se quitará de la lista. Esta acción no se puede deshacer.</p>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" (click)="deletingItem.set(null)">
+          Cancelar
+        </button>
+        <button
+          class="danger-button"
+          type="button"
+          [disabled]="store.busy() || store.offline()"
+          (click)="confirmDelete()"
+        >
+          Sí, eliminar
+        </button>
+      </div>
+    </section>
+  </div>
+}
+
+@if (completionDialogOpen()) {
+  <div class="dialog-backdrop" role="presentation">
+    <section
+      class="dialog-card celebration"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="complete-title"
+    >
+      <span class="celebration-mark" aria-hidden="true">✓</span>
+      <h2 id="complete-title">Compra completada</h2>
+      <p>¿Quieres cerrar esta compra y empezar una lista nueva?</p>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" (click)="dismissCompletion()">
+          Ahora no
+        </button>
+        <button
+          class="primary-button"
+          type="button"
+          [disabled]="store.busy() || store.offline()"
+          (click)="startNewList()"
+        >
+          Nueva lista
+        </button>
+      </div>
+    </section>
+  </div>
+}
+
+@if (clearDialogOpen()) {
+  <div class="dialog-backdrop" role="presentation">
+    <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="clear-title">
+      @if (store.pendingCount() > 0) {
+        <h2 id="clear-title">Vaciar lista</h2>
+        <p>Hay productos que todavía no se han comprado. ¿Qué quieres hacer con ellos?</p>
+        <div class="dialog-actions dialog-actions--stacked">
+          <button
+            class="primary-button"
+            type="button"
+            [disabled]="store.busy() || store.offline()"
+            (click)="clearList('CARRY_PENDING')"
+          >
+            Pasar pendientes a nueva lista
+          </button>
+          <button
+            class="danger-text-button"
+            type="button"
+            [disabled]="store.busy() || store.offline()"
+            (click)="clearList('CLEAR_ALL')"
+          >
+            Vaciar todo
+          </button>
+          <button class="secondary-button" type="button" (click)="clearDialogOpen.set(false)">
+            Cancelar
+          </button>
+        </div>
+      } @else {
+        <h2 id="clear-title">Empezar una lista nueva</h2>
+        <p>Todos los productos están comprados. La compra actual quedará guardada.</p>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="button" (click)="clearDialogOpen.set(false)">
+            Cancelar
+          </button>
+          <button
+            class="primary-button"
+            type="button"
+            [disabled]="store.busy() || store.offline()"
+            (click)="clearList('CLEAR_ALL')"
+          >
+            Empezar nueva lista
+          </button>
+        </div>
+      }
+    </section>
+  </div>
+}

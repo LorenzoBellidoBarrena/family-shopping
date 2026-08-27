@@ -1,0 +1,3 @@
+# Copia este archivo como .dev.vars para probar el bootstrap local.
+# Sustituye el placeholder; no reutilices una clave real de producción.
+HOUSEHOLD_ACCESS_KEY="REPLACE_WITH_LOCAL_ACCESS_KEY"
