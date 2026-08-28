@@ -1,4 +1,11 @@
-import type { ImportedProduct, ImportRun } from '../domain/supermarket-import';
+import type {
+  ImportedProduct,
+  ImportedStore,
+  ImportRun,
+  SupermarketImportProvider,
+} from '../domain/supermarket-import';
+
+type ProviderId = SupermarketImportProvider['providerId'];
 
 interface ImportRunRow {
   id: string;
@@ -33,17 +40,15 @@ const mapRun = (row: ImportRunRow): ImportRun => ({
 });
 
 export class SupermarketImportRepository {
-  private static readonly ONLINE_STORE_ID = 'carrefour-online-es';
-
   constructor(private readonly db: D1Database) {}
 
-  async startRun(id: string, now: string): Promise<void> {
+  async startRun(id: string, providerId: ProviderId, now: string): Promise<void> {
     await this.db
       .prepare(
         `INSERT INTO import_runs (id, provider, started_at, status)
-         VALUES (?, 'carrefour', ?, 'RUNNING')`,
+         VALUES (?, ?, ?, 'RUNNING')`,
       )
-      .bind(id, now)
+      .bind(id, providerId, now)
       .run();
   }
 
@@ -109,18 +114,18 @@ export class SupermarketImportRepository {
   }
 
   async persistProduct(
+    providerId: ProviderId,
+    catalogStore: ImportedStore,
     product: ImportedProduct,
     observedAt: string,
   ): Promise<{
     priceInserted: boolean;
     offerPersisted: boolean;
   }> {
-    await this.ensureOnlineScope();
+    const storeId = await this.persistStore(providerId, catalogStore);
     const existing = await this.db
-      .prepare(
-        `SELECT id FROM external_products WHERE supermarket_id = 'carrefour' AND external_id = ?`,
-      )
-      .bind(product.externalId)
+      .prepare(`SELECT id FROM external_products WHERE supermarket_id = ? AND external_id = ?`)
+      .bind(providerId, product.externalId)
       .first<{ id: string }>();
     const productId = existing?.id ?? crypto.randomUUID();
     await this.db.batch([
@@ -129,7 +134,7 @@ export class SupermarketImportRepository {
           `INSERT INTO external_products
              (id, supermarket_id, external_id, ean, name, normalized_name, brand, category,
               image_url, package_quantity, package_unit, last_seen_at, source_url, visual_category)
-           VALUES (?, 'carrefour', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(supermarket_id, external_id) DO UPDATE SET
              ean = excluded.ean, name = excluded.name, normalized_name = excluded.normalized_name,
              brand = excluded.brand, category = excluded.category, image_url = excluded.image_url,
@@ -139,6 +144,7 @@ export class SupermarketImportRepository {
         )
         .bind(
           productId,
+          providerId,
           product.externalId,
           product.ean,
           product.name,
@@ -159,7 +165,7 @@ export class SupermarketImportRepository {
            ON CONFLICT(store_id, product_id) DO UPDATE SET
              catalog_status = 'PUBLISHED', observed_at = excluded.observed_at`,
         )
-        .bind(SupermarketImportRepository.ONLINE_STORE_ID, productId, observedAt),
+        .bind(storeId, productId, observedAt),
     ]);
 
     const latest = await this.db
@@ -168,7 +174,7 @@ export class SupermarketImportRepository {
          FROM product_prices WHERE product_id = ? AND store_id = ?
          ORDER BY observed_at DESC, id DESC LIMIT 1`,
       )
-      .bind(productId, SupermarketImportRepository.ONLINE_STORE_ID)
+      .bind(productId, storeId)
       .first<PriceRow>();
     const priceInserted =
       !latest ||
@@ -181,67 +187,121 @@ export class SupermarketImportRepository {
           `INSERT INTO product_prices
              (id, product_id, store_id, price_cents, unit_price_cents, observed_at,
               unit_price_unit, channel, geographic_scope)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'ONLINE', 'ONLINE')`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           crypto.randomUUID(),
           productId,
-          SupermarketImportRepository.ONLINE_STORE_ID,
+          storeId,
           product.priceCents,
           product.unitPriceCents,
           observedAt,
           product.unitPriceUnit,
+          product.channel,
+          product.geographicScope,
         )
         .run();
     }
 
     if (product.offer) {
       const offer = product.offer;
-      await this.db
+      const existingOffer = await this.db
         .prepare(
-          `INSERT INTO offers
+          `SELECT id FROM offers
+           WHERE product_id = ? AND store_id = ? AND promotion_type = ?
+             AND valid_from IS ? AND valid_until IS ?`,
+        )
+        .bind(productId, storeId, offer.label, offer.validFrom, offer.validUntil)
+        .first<{ id: string }>();
+      if (existingOffer) {
+        await this.db
+          .prepare(
+            `UPDATE offers SET
+               normal_price_cents = ?, offer_price_cents = ?, source_url = ?,
+               requires_loyalty_card = ?, observed_at = ?, offer_type = ?, percentage = ?,
+               buy_quantity = ?, pay_quantity = ?, channel = ?, geographic_scope = ?,
+               loyalty_program = ?
+             WHERE id = ?`,
+          )
+          .bind(
+            offer.normalPriceCents,
+            offer.offerPriceCents,
+            product.sourceUrl,
+            offer.requiresLoyaltyCard ? 1 : 0,
+            observedAt,
+            offer.type,
+            offer.percentage,
+            offer.buyQuantity,
+            offer.payQuantity,
+            offer.channel,
+            offer.geographicScope,
+            offer.loyaltyProgram,
+            existingOffer.id,
+          )
+          .run();
+      } else {
+        await this.db
+          .prepare(
+            `INSERT INTO offers
              (id, product_id, store_id, normal_price_cents, offer_price_cents, promotion_type,
               valid_from, valid_until, source_url, requires_loyalty_card, observed_at, offer_type,
               percentage, buy_quantity, pay_quantity, channel, geographic_scope, loyalty_program)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(product_id, store_id, promotion_type, valid_from, valid_until) DO UPDATE SET
-             normal_price_cents = excluded.normal_price_cents,
-             offer_price_cents = excluded.offer_price_cents,
-             source_url = excluded.source_url,
-             requires_loyalty_card = excluded.requires_loyalty_card,
-             observed_at = excluded.observed_at,
-             offer_type = excluded.offer_type,
-             percentage = excluded.percentage,
-             buy_quantity = excluded.buy_quantity,
-             pay_quantity = excluded.pay_quantity,
-             channel = excluded.channel,
-             geographic_scope = excluded.geographic_scope,
-             loyalty_program = excluded.loyalty_program`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          productId,
-          SupermarketImportRepository.ONLINE_STORE_ID,
-          offer.normalPriceCents,
-          offer.offerPriceCents,
-          offer.label,
-          offer.validFrom,
-          offer.validUntil,
-          product.sourceUrl,
-          offer.requiresLoyaltyCard ? 1 : 0,
-          observedAt,
-          offer.type,
-          offer.percentage,
-          offer.buyQuantity,
-          offer.payQuantity,
-          offer.channel,
-          offer.geographicScope,
-          offer.loyaltyProgram,
-        )
-        .run();
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            productId,
+            storeId,
+            offer.normalPriceCents,
+            offer.offerPriceCents,
+            offer.label,
+            offer.validFrom,
+            offer.validUntil,
+            product.sourceUrl,
+            offer.requiresLoyaltyCard ? 1 : 0,
+            observedAt,
+            offer.type,
+            offer.percentage,
+            offer.buyQuantity,
+            offer.payQuantity,
+            offer.channel,
+            offer.geographicScope,
+            offer.loyaltyProgram,
+          )
+          .run();
+      }
     }
 
     return { priceInserted, offerPersisted: product.offer !== null };
+  }
+
+  async persistStore(providerId: ProviderId, store: ImportedStore): Promise<string> {
+    const id = `${providerId}-${store.externalId}`;
+    await this.db
+      .prepare(
+        `INSERT INTO stores
+           (id, supermarket_id, external_id, name, address, city, postal_code,
+            latitude, longitude, active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(supermarket_id, external_id) DO UPDATE SET
+           name = excluded.name, address = excluded.address, city = excluded.city,
+           postal_code = excluded.postal_code, latitude = excluded.latitude,
+           longitude = excluded.longitude, active = excluded.active`,
+      )
+      .bind(
+        id,
+        providerId,
+        store.externalId,
+        store.name,
+        store.address,
+        store.city,
+        store.postalCode,
+        store.latitude,
+        store.longitude,
+        store.active ? 1 : 0,
+      )
+      .run();
+    return id;
   }
 
   private async getRun(id: string): Promise<ImportRun | null> {
@@ -253,17 +313,5 @@ export class SupermarketImportRepository {
       .bind(id)
       .first<ImportRunRow>();
     return row ? mapRun(row) : null;
-  }
-
-  private async ensureOnlineScope(): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT OR IGNORE INTO stores
-           (id, supermarket_id, external_id, name, address, city, postal_code, active)
-         VALUES (?, 'carrefour', 'online-es', 'Carrefour online España',
-                 'Canal online público', 'España', 'N/A', 1)`,
-      )
-      .bind(SupermarketImportRepository.ONLINE_STORE_ID)
-      .run();
   }
 }

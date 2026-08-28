@@ -2,11 +2,16 @@ import { applyD1Migrations, env, type D1Migration } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import directOffer from '../../tests/fixtures/carrefour/direct-offer.html?raw';
 import normalPrice from '../../tests/fixtures/carrefour/normal-price.html?raw';
+import diaStores from '../../tests/fixtures/dia/stores.html?raw';
+import diaMalformed from '../../tests/fixtures/dia/malformed.html?raw';
+import diaOffersPage from '../../tests/fixtures/dia/offers-page.html?raw';
+import diaWeeklyOffers from '../../tests/fixtures/dia/weekly-offers.html?raw';
 import type {
   ParsedCarrefourProduct,
   SupermarketImportProvider,
 } from '../domain/supermarket-import';
 import { CarrefourImportProvider } from '../providers/carrefour-import-provider';
+import { DiaProvider } from '../providers/dia-provider';
 import { SupermarketImportRepository } from '../repositories/supermarket-import-repository';
 import { SupermarketImportService } from './supermarket-import-service';
 
@@ -21,6 +26,16 @@ const sourceTwo = 'https://www.carrefour.es/supermercado/leche-cantara/R-700248/
 
 class FixtureCarrefourProvider implements SupermarketImportProvider {
   readonly providerId = 'carrefour' as const;
+  readonly catalogStore = {
+    externalId: 'online-es',
+    name: 'Carrefour online España',
+    address: 'Canal online público',
+    city: 'España',
+    postalCode: 'N/A',
+    latitude: null,
+    longitude: null,
+    active: true,
+  } as const;
   private readonly parser = new CarrefourImportProvider();
 
   constructor(private readonly includeInvalid = false) {}
@@ -102,6 +117,69 @@ describe('SupermarketImportService', () => {
       productsSeen: 2,
       rejectedItems: 1,
       errorCode: 'CARREFOUR_NO_VALID_PRODUCT',
+    });
+  });
+
+  it('imports DIA stores, products and price history idempotently', async () => {
+    const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
+      const url = input.toString();
+      return new Response(url.includes('/tiendas/') ? diaStores : diaWeeklyOffers, {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    };
+    const repository = new SupermarketImportRepository(testEnv.DB);
+    const service = new SupermarketImportService(repository, new DiaProvider(fetcher));
+
+    const first = await service.importDia(20);
+    const second = await service.importDia(20);
+
+    expect(first).toMatchObject({
+      provider: 'dia',
+      status: 'SUCCESS',
+      productsSeen: 10,
+      pricesSeen: 10,
+      offersSeen: 3,
+      rejectedItems: 0,
+    });
+    expect(second).toMatchObject({ status: 'SUCCESS', productsSeen: 10, offersSeen: 3 });
+    const counts = await testEnv.DB.prepare(
+      `SELECT
+        (SELECT COUNT(*) FROM stores WHERE supermarket_id = 'dia') AS stores,
+        (SELECT COUNT(*) FROM external_products WHERE supermarket_id = 'dia') AS products,
+        (SELECT COUNT(*) FROM product_prices) AS prices,
+        (SELECT COUNT(*) FROM offers) AS offers,
+        (SELECT COUNT(*) FROM import_runs WHERE provider = 'dia') AS runs`,
+    ).first<{ stores: number; products: number; prices: number; offers: number; runs: number }>();
+    expect(counts).toEqual({ stores: 4, products: 10, prices: 10, offers: 3, runs: 2 });
+  });
+
+  it('keeps DIA offers without published dates idempotent', async () => {
+    const fetcher = async (input: RequestInfo | URL): Promise<Response> =>
+      new Response(input.toString().includes('/tiendas/') ? diaStores : diaOffersPage);
+    const repository = new SupermarketImportRepository(testEnv.DB);
+    const service = new SupermarketImportService(repository, new DiaProvider(fetcher));
+
+    expect(await service.importDia()).toMatchObject({ status: 'SUCCESS', offersSeen: 1 });
+    expect(await service.importDia()).toMatchObject({ status: 'SUCCESS', offersSeen: 1 });
+    expect(
+      await testEnv.DB.prepare(`SELECT COUNT(*) AS count FROM offers`).first<{ count: number }>(),
+    ).toEqual({ count: 1 });
+  });
+
+  it('marks an unexpected DIA document as failed without affecting other modules', async () => {
+    const fetcher = async (input: RequestInfo | URL): Promise<Response> =>
+      new Response(input.toString().includes('/tiendas/') ? diaStores : diaMalformed);
+    const service = new SupermarketImportService(
+      new SupermarketImportRepository(testEnv.DB),
+      new DiaProvider(fetcher),
+    );
+
+    expect(await service.importDia()).toMatchObject({
+      status: 'FAILED',
+      productsSeen: 0,
+      rejectedItems: 1,
+      errorCode: 'DIA_PAGE_CONTEXT_INVALID',
     });
   });
 });

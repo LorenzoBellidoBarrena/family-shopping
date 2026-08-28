@@ -532,11 +532,16 @@ describe('supermarket offers module', () => {
       method: 'POST',
       headers: { 'x-import-admin-key': 'integration-test-import-admin-key' },
     });
+    const diaDisabled = await api('/api/admin/imports/dia', {
+      method: 'POST',
+      headers: { 'x-import-admin-key': 'integration-test-import-admin-key' },
+    });
 
     expect(unauthorized.status).toBe(401);
     expect(listing.status).toBe(200);
     expect(await readJson<{ imports: unknown[] }>(listing)).toEqual({ imports: [] });
     expect(disabled.status).toBe(503);
+    expect(diaDisabled.status).toBe(503);
     expect(await readJson<{ error: { code: string } }>(disabled)).toMatchObject({
       error: { code: 'SUPERMARKET_FEATURE_DISABLED' },
     });

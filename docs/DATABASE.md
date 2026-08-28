@@ -1,9 +1,9 @@
 # Base de datos D1
 
 Las migraciones son `0001_initial_schema.sql`, `0002_realtime_revisions.sql`,
-`0003_supermarket_catalog.sql`, `0004_product_categories.sql` y
-`0005_carrefour_import_foundation.sql`. Se validan con el runtime de pruebas oficial de Workers y
-D1 local.
+`0003_supermarket_catalog.sql`, `0004_product_categories.sql`,
+`0005_carrefour_import_foundation.sql` y `0006_nullable_offer_validity.sql`. Se validan con el
+runtime de pruebas oficial de Workers y D1 local.
 
 ## Tablas
 
@@ -58,6 +58,18 @@ El canal público observado es online, por lo que se persiste bajo el ámbito l�
 snapshot sólo cuando cambia precio o precio unitario. Las ofertas se actualizan por su clave natural
 y las expiradas se conservan, pero la consulta activa aplica ambos límites de vigencia.
 
+## Importación DIA
+
+`0006` reconstruye de forma conservadora sólo `offers`, copiando todos los registros existentes,
+para permitir `valid_from` y `valid_until` nulos. DIA no publica vigencia individual en todos los
+productos de su página de ofertas y el importador no inventa fechas. La consulta activa trata cada
+límite nulo como abierto. La idempotencia compara ambos valores con `IS`, por lo que imports sin
+fechas tampoco duplican ofertas.
+
+Las tres tiendas de Zafra usan sus IDs públicos DIA. El catálogo online se persiste, cuando la fuente
+responde, bajo `dia-online-es`; una publicación significa catálogo, nunca stock. No existen tablas ni
+columnas específicas de DIA.
+
 ## Atomicidad
 
 - Bootstrap: household, singleton, primer device y primer ciclo en un lote.
@@ -74,7 +86,7 @@ ordenar y deduplicar avisos; nunca sustituye la lectura canónica del ciclo acti
 npm run db:setup:local
 ```
 
-El seed `database/seeds/0001_supermarkets.sql` es idempotente. La migración `0003` está aplicada en
-D1 local y remota; no contiene fixtures ni datos comerciales. `0004` está aplicada local y
-remotamente. `0005` se valida primero en D1 local antes de cualquier despliegue. Los fixtures viven
-sólo en código/pruebas y nunca se cargan mediante una migración.
+El seed `database/seeds/0001_supermarkets.sql` es idempotente. Las migraciones `0003`, `0004` y
+`0005` están aplicadas local y remotamente. `0006` sólo está aplicada en D1 local en esta tarea; no
+se ha desplegado ni aplicado remotamente. Los fixtures viven sólo en código/pruebas y nunca se
+cargan mediante una migración.

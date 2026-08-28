@@ -26,7 +26,10 @@ export const routeAdminImports = async (request: Request, env: Env): Promise<Res
     return jsonResponse({ imports: await service.listRuns() });
   }
 
-  if (url.pathname === '/api/admin/imports/carrefour') {
+  if (
+    url.pathname === '/api/admin/imports/carrefour' ||
+    url.pathname === '/api/admin/imports/dia'
+  ) {
     if (request.method !== 'POST') return methodNotAllowed(['POST']);
     if (env.SUPERMARKET_FEATURE_ENABLED !== 'true') {
       throw new ApiError(503, 'SUPERMARKET_FEATURE_DISABLED', 'La importación está desactivada.');
@@ -39,7 +42,11 @@ export const routeAdminImports = async (request: Request, env: Env): Promise<Res
     if (limit < 1 || limit > 20) {
       throw badRequest('INVALID_LIMIT', 'limit debe ser un entero entre 1 y 20.');
     }
-    return jsonResponse({ import: await service.importCarrefour(limit) }, 201);
+    const imported =
+      url.pathname === '/api/admin/imports/dia'
+        ? await service.importDia(limit)
+        : await service.importCarrefour(limit);
+    return jsonResponse({ import: imported }, 201);
   }
 
   throw notFound('La ruta solicitada no existe.');

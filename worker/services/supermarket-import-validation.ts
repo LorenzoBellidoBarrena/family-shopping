@@ -5,7 +5,21 @@ import {
   type ImportedProduct,
 } from '../domain/supermarket-import';
 
-const validDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/u.test(value);
+const validDate = (value: string | null): boolean => {
+  if (value === null) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+const validHttpsUrl = (value: string | null): boolean => {
+  if (value === null) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+};
 const validCents = (value: number | null): boolean =>
   value === null || (Number.isSafeInteger(value) && value >= 0);
 
@@ -19,6 +33,15 @@ export const validateImportedProduct = (product: ImportedProduct): ImportedProdu
   if (!validCents(product.priceCents) || !validCents(product.unitPriceCents)) {
     throw new Error('IMPORT_INVALID_PRICE');
   }
+  if (!validHttpsUrl(product.sourceUrl) || !validHttpsUrl(product.imageUrl)) {
+    throw new Error('IMPORT_INVALID_URL');
+  }
+  if (
+    product.packageQuantity !== null &&
+    (!Number.isFinite(product.packageQuantity) || product.packageQuantity <= 0)
+  ) {
+    throw new Error('IMPORT_INVALID_PACKAGE');
+  }
   if (
     !OFFER_CHANNELS.includes(product.channel) ||
     !GEOGRAPHIC_SCOPES.includes(product.geographicScope)
@@ -29,6 +52,8 @@ export const validateImportedProduct = (product: ImportedProduct): ImportedProdu
     const offer = product.offer;
     if (
       !OFFER_TYPES.includes(offer.type) ||
+      !offer.label ||
+      offer.label.length > 160 ||
       !validCents(offer.normalPriceCents) ||
       !validCents(offer.offerPriceCents)
     ) {
@@ -37,7 +62,7 @@ export const validateImportedProduct = (product: ImportedProduct): ImportedProdu
     if (
       !validDate(offer.validFrom) ||
       !validDate(offer.validUntil) ||
-      offer.validUntil < offer.validFrom
+      (offer.validFrom !== null && offer.validUntil !== null && offer.validUntil < offer.validFrom)
     ) {
       throw new Error('IMPORT_INVALID_VALIDITY');
     }

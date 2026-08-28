@@ -120,7 +120,13 @@ Los endpoints de importación usan `x-import-admin-key` con el secret independie
 | ------ | ------------------------------ | ----------------------------------- |
 | `GET`  | `/api/admin/imports`           | Últimas ejecuciones y métricas.     |
 | `POST` | `/api/admin/imports/carrefour` | Import manual acotado de Carrefour. |
+| `POST` | `/api/admin/imports/dia`       | Import manual acotado de DIA.       |
 
 El `POST` admite `limit=1..20` y además exige `SUPERMARKET_FEATURE_ENABLED=true`. Producción lo
 mantiene en `false` y no tiene `IMPORT_ADMIN_KEY` configurado todavía. Las respuestas nunca incluyen
 HTML remoto, cookies, stack traces ni secretos.
+
+El endpoint DIA descubre las tiendas oficiales de Zafra y consulta la página pública de ofertas.
+Los precios de esta última se etiquetan `ONLINE`; no se atribuyen a una tienda física. En la
+validación del 28 de agosto de 2026, DIA redirigió las peticiones desde el runtime Cloudflare a
+`/error`, por lo que la ejecución termina de forma encapsulada en `FAILED` y no persiste productos.

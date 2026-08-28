@@ -1,10 +1,24 @@
 # Progreso
 
-## Fase actual: fundamento real de Carrefour
+## Fase actual: evaluación del proveedor real DIA
 
-Estado: completado y desplegado en producción el 28 de agosto de 2026.
+Estado: implementación local completada; fuente remota no apta para producción el 28 de agosto de 2026.
 
 ### Implementado
+
+- `DiaProvider` real separado en discovery, fetch, parse, normalize, validación y persistencia.
+- Discovery estable de `/ofertas` y del localizador oficial de Zafra, sin URLs de campaña fechadas.
+- Tiendas públicas confirmadas: 454, 17052 y 17583; sin coordenadas inventadas.
+- Parser del `vike_pageContext` público para precio, precio unitario, marca, categoría comercial,
+  Club DIA, porcentaje y segunda unidad; scope del catálogo `ONLINE`.
+- Migración local `0006_nullable_offer_validity.sql` para no inventar fechas ausentes.
+- Endpoint protegido `POST /api/admin/imports/dia`; feature flag y cron siguen desactivados.
+- Siete fixtures DIA mínimos tomados de páginas públicas y validación manual 10/10 de nombres,
+  precios y precios unitarios contra la web oficial.
+- Import determinista con fixtures reales: 10 productos, 10 precios, 3 ofertas y 4
+  ámbitos/tiendas; dos pasadas conservan 10 productos, 10 snapshots y 3 ofertas.
+- Import remoto local: `FAILED`, cero productos, porque el runtime Cloudflare recibe una redirección
+  oficial a `/error` tanto desde `/` como desde `/ofertas`. No se intentó evasión.
 
 - Fase 1 publicada y aislada en el commit `3dcf317`; D1 `0001`–`0004`, PWA, Worker, Static Assets,
   Durable Object SQLite y smoke tests verdes.
@@ -60,8 +74,8 @@ Estado: completado y desplegado en producción el 28 de agosto de 2026.
 ### Verificación
 
 - 27 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden y caché offline.
-- 41 pruebas Worker/D1, incluidas lista, WebSocket, parser Carrefour, seguridad, import e
-  idempotencia.
+- 51 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA, seguridad, import e
+  idempotencia; 27 pruebas Angular, 78 en total.
 - Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.
@@ -107,6 +121,8 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
 - Revocación explícita de dispositivos y Content Security Policy endurecida.
 - Descarga real de Carrefour: la fuente pública bloqueó la petición conservadora; requiere permiso
   o feed oficial. No se intentó evasión y no se importó ningún dato remoto.
+- Import DIA en producción: no ejecutado. Hace falta un feed oficial o acceso autorizado que
+  responda de forma estable desde Cloudflare; los fixtures no se consideran import remoto.
 - Comparador `¿Dónde sale más barato?`, hasta disponer de datos equivalentes y completos.
 
 ### Acción manual

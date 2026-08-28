@@ -174,8 +174,18 @@ const promotion = (
 
 export class CarrefourImportProvider implements SupermarketImportProvider {
   readonly providerId = 'carrefour' as const;
+  readonly catalogStore = {
+    externalId: 'online-es',
+    name: 'Carrefour online España',
+    address: 'Canal online público',
+    city: 'España',
+    postalCode: 'N/A',
+    latitude: null,
+    longitude: null,
+    active: true,
+  } as const;
 
-  constructor(private readonly fetcher: typeof fetch = fetch) {}
+  constructor(private readonly fetcher: typeof fetch = (...args) => fetch(...args)) {}
 
   async discover(limit = 20): Promise<string[]> {
     const index = await this.fetchDocument(SITEMAP_INDEX, 'sitemap');

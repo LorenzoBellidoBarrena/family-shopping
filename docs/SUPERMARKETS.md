@@ -2,9 +2,10 @@
 
 ## Alcance de esta fase
 
-El módulo está preparado para Lidl, Mercadona, Carrefour y DIA con foco en Zafra (06300), pero no
-extrae datos reales. La pestaña `Ofertas` usa ocho fixtures marcados en API y UI como demostración.
-Sus precios no deben interpretarse como precios comerciales vigentes.
+El módulo está preparado para Lidl, Mercadona, Carrefour y DIA con foco en Zafra (06300). Los
+parsers de Carrefour y DIA usan fixtures reales mínimos, pero ninguna fuente remota es estable desde
+Cloudflare y no se ha ejecutado ningún import en producción. La pestaña `Ofertas` continúa usando
+fixtures marcados como demostración; no deben interpretarse como precios vigentes.
 
 La lista familiar no depende de este módulo. Cada proveedor implementa `SupermarketProvider` y se
 consulta con `Promise.allSettled`: si una cadena falla, las demás siguen respondiendo y la API marca
@@ -62,18 +63,20 @@ envases, vigencia y ámbito de tienda produciría conclusiones incorrectas.
 
 ### DIA
 
-- Fuente: [tiendas DIA de Zafra](https://www.dia.es/tiendas/buscador-tiendas/badajoz/zafra),
-  [supermercado online](https://www.dia.es/) y [aviso legal](https://www.dia.es/l/aviso-legal).
-- Método visible: páginas públicas de producto/precio y folletos por tienda. El localizador muestra
-  tres establecimientos en Zafra y la vigencia del folleto aplicable.
+- Fuente: [tiendas DIA de Zafra](https://www.dia.es/tiendas/buscador-tiendas/badajoz/zafra/06300),
+  [ofertas DIA](https://www.dia.es/ofertas), [supermercado online](https://www.dia.es/) y
+  [`robots.txt`](https://www.dia.es/robots.txt).
+- Método visible: HTML público con `vike_pageContext` JSON embebido. El localizador confirma CR
+  Santos de Maimona (454), AV Estación/PZ América (17052) y CL López Asme (17583), todas en 06300.
 - Ámbito: el surtido online se adapta al código postal; folleto y oferta pueden depender de tienda,
   Club DIA o canal online.
 - Frecuencia esperable: semanal para folletos y potencialmente más frecuente para precio online.
 - Estabilidad: media; las fichas son estructuradas, pero navegación, filtros y surtido cambian con
   código postal.
-- Restricciones: el aviso legal concede uso privado del portal y reserva derechos sobre contenidos.
-  `robots.txt` bloquea rutas de ofertas, búsqueda, filtros, analítica y `/products/`; no se crearán
-  llamadas automatizadas a esas rutas sin autorización expresa o un feed oficial acordado.
+- Restricciones: `robots.txt` permite `/ofertas`, pero bloquea subrutas paginadas de ofertas,
+  búsqueda, filtros, analítica y `/products/`; el provider no consulta ninguna ruta bloqueada.
+  Desde el runtime Cloudflare, `/` y `/ofertas` redirigen a `/error`. Se detuvo ese camino sin
+  cambiar identidad, cookies, sesiones, proxies ni controles anti-bot.
 - Limitación: «agotado» online y publicación en catálogo no demuestran stock en la tienda física.
 
 ### Carrefour
@@ -155,6 +158,30 @@ de Carrefour. No se cambiaron user agents, cookies, proxies ni sesiones para sor
 mínimos de `tests/fixtures/carrefour/` permiten validar el parser y el importador local, pero no se
 ha realizado ni se afirma una descarga real estable. El siguiente paso legítimo es obtener permiso o
 un feed oficial; hasta entonces el feature flag y el cron permanecen desactivados.
+
+## Implementación y validación DIA
+
+`DiaProvider` limita hosts y rutas oficiales, bloquea redirects arbitrarios, usa timeout de 9 s,
+1 MiB máximo y un solo reintento. Discovery consulta rutas estables, no campañas fechadas. Separa
+el parser de tiendas del parser de catálogo y reutiliza `external_products`, `product_prices`,
+`offers`, `stores`, `store_products` e `import_runs`.
+
+Los precios se convierten inmediatamente a céntimos enteros. `commercial_category` procede de la
+ruta comercial y `visual_category` del clasificador compartido; no se mezclan taxonomías. En los
+datos observados aparecen precios Club DIA, descuentos porcentuales y segunda unidad. Club se
+persiste como `CLUB_DIA`. No se observó un 3x2 en las diez muestras y no se afirma lo contrario.
+
+Los precios web se marcan `ONLINE`; las tres tiendas sólo se asocian a sus metadatos. No se atribuye
+a Zafra un precio online y no se usa `units_in_stock`, aunque aparezca en el JSON, porque no
+demuestra stock físico. Cuando DIA no da vigencia individual se conserva `NULL`.
+
+Los fixtures `stores`, `standard-price`, `club-dia`, `second-unit`, `offers-page`, `weekly-offers` y
+`malformed` contienen sólo fragmentos necesarios. Diez productos se contrastaron con la fuente el
+28 de agosto: 10/10 nombres, precios y precios unitarios coincidieron. El import determinista sobre
+D1 de pruebas produjo 10 productos, 10 precios, 3 ofertas y 4 stores/ámbitos; la segunda pasada no
+duplicó filas. El import real desde Worker produjo `FAILED`, 0 productos, por redirect a `/error`.
+Por ello el criterio global es **FAIL para automatización remota**, pese a que parser y persistencia
+con fixtures sean correctos.
 
 ### Seguridad y operación
 

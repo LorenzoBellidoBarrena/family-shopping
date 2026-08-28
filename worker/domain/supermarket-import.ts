@@ -25,8 +25,8 @@ export interface ImportedOffer {
   percentage: number | null;
   buyQuantity: number | null;
   payQuantity: number | null;
-  validFrom: string;
-  validUntil: string;
+  validFrom: string | null;
+  validUntil: string | null;
   channel: OfferChannel;
   geographicScope: GeographicScope;
   requiresLoyaltyCard: boolean;
@@ -53,7 +53,7 @@ export interface ImportedProduct {
   offer: ImportedOffer | null;
 }
 
-export interface ParsedCarrefourProduct {
+export interface ParsedSupermarketProduct {
   externalId: string;
   name: string;
   brand?: string;
@@ -69,14 +69,34 @@ export interface ParsedCarrefourProduct {
   validFrom?: string;
   validUntil?: string;
   sourceUrl: string;
+  promotionRequiresLoyalty?: boolean;
+  promotionTypeHint?: OfferType;
+  channel?: OfferChannel;
+  geographicScope?: GeographicScope;
+}
+
+export type ParsedCarrefourProduct = ParsedSupermarketProduct;
+
+export interface ImportedStore {
+  externalId: string;
+  name: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  latitude: number | null;
+  longitude: number | null;
+  active: boolean;
 }
 
 export interface SupermarketImportProvider {
-  readonly providerId: 'carrefour';
+  readonly providerId: 'carrefour' | 'dia';
+  readonly catalogStore: ImportedStore;
   discover(limit?: number): Promise<string[]>;
   fetch(sourceUrl: string): Promise<string>;
-  parse(document: string, sourceUrl: string): ParsedCarrefourProduct[];
-  normalize(product: ParsedCarrefourProduct): ImportedProduct;
+  parse(document: string, sourceUrl: string): ParsedSupermarketProduct[];
+  normalize(product: ParsedSupermarketProduct): ImportedProduct;
+  discoverStores?(): Promise<string[]>;
+  parseStores?(document: string, sourceUrl: string): ImportedStore[];
 }
 
 export interface ImportRun {
