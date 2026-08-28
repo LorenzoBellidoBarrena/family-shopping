@@ -129,3 +129,40 @@ precios, no para ofertas, y sólo con acceso autorizado que preserve el contexto
 - Guardar fuente, instante observado, tienda/ámbito y vigencia en cada dato.
 - Invalidar datos caducados y mostrar siempre «disponibilidad no confirmada».
 - Detener sólo el proveedor afectado ante cambios; la lista familiar y las otras cadenas continúan.
+
+## Fundación real de Carrefour
+
+La implementación utiliza como punto de discovery el
+[sitemap oficial de alimentación](https://www.carrefour.es/crs/cdn-static/sitemap-food/index.xml),
+publicado por el propio [`robots.txt`](https://www.carrefour.es/robots.txt). Sólo acepta HTTPS,
+`www.carrefour.es`, rutas del sitemap de alimentación y fichas públicas `/supermercado/.../R-.../p`.
+No usa AJAX, búsqueda, carrito, cuenta, cookies, tokens privados ni rutas desautorizadas.
+
+`CarrefourProvider` separa `discover`, `fetch`, `parse` y `normalize`. El parser consume datos
+estructurados `Product`/`Offer`, convierte coma decimal y precios unitarios a céntimos, reutiliza
+`normalizeProductName` y mapea con prudencia a `ProductCategory`. Soporta precio directo, porcentaje,
+3x2, segunda unidad, cashback, loyalty y precio especial. Cashback conserva como precio pagado hoy
+el precio completo.
+
+La [ficha pública de leche](https://www.carrefour.es/supermercado/leche-entera-pascual-brik-1-l/R-521006986/p)
+muestra nombre, marca, precio, precio unitario y validez. La
+[página oficial de Carrefour Zafra](https://www.carrefour.es/tiendas-carrefour/hipermercados/carrefour/zafra.aspx)
+confirma dirección y menciona 3x2, segunda unidad, cashback y Club Carrefour, pero no demuestra que
+los precios online pertenezcan a esa tienda. Por ello el scope persistido es `ONLINE`, no `STORE`.
+
+Una petición conservadora al sitemap desde el entorno de desarrollo recibió el bloqueo de seguridad
+de Carrefour. No se cambiaron user agents, cookies, proxies ni sesiones para sortearlo. Los fixtures
+mínimos de `tests/fixtures/carrefour/` permiten validar el parser y el importador local, pero no se
+ha realizado ni se afirma una descarga real estable. El siguiente paso legítimo es obtener permiso o
+un feed oficial; hasta entonces el feature flag y el cron permanecen desactivados.
+
+### Seguridad y operación
+
+- `IMPORT_ADMIN_KEY` es independiente del device token y no está configurado en producción.
+- `SUPERMARKET_FEATURE_ENABLED=false` por defecto.
+- Máximo 20 fichas por petición administrativa, 8 segundos y 2 MiB por respuesta.
+- Allowlist estricta evita SSRF y se vuelve a validar la URL tras redirects.
+- Un producto inválido produce `PARTIAL`; discovery bloqueado produce `FAILED` sin stack trace.
+- Precio histórico sólo se inserta cuando cambia; producto y oferta usan upsert idempotente.
+- `scheduled()` está preparado, pero `crons: []`. Cloudflare Cron usa UTC; no se fija todavía una
+  hora para evitar errores con el horario Europe/Madrid.

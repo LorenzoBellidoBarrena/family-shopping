@@ -1,8 +1,9 @@
 # Base de datos D1
 
 Las migraciones son `0001_initial_schema.sql`, `0002_realtime_revisions.sql`,
-`0003_supermarket_catalog.sql` y `0004_product_categories.sql`. Se validan con el runtime de
-pruebas oficial de Workers y D1 local.
+`0003_supermarket_catalog.sql`, `0004_product_categories.sql` y
+`0005_carrefour_import_foundation.sql`. Se validan con el runtime de pruebas oficial de Workers y
+D1 local.
 
 ## Tablas
 
@@ -22,6 +23,7 @@ pruebas oficial de Workers y D1 local.
 - `store_products`: relación de publicación producto/tienda; no representa stock.
 - `product_prices`: histórico de precios en céntimos enteros.
 - `offers`: promociones, vigencia, fuente y requisito de tarjeta en céntimos enteros.
+- `import_runs`: ejecución y métricas acotadas del proveedor, sin respuestas ni stack traces.
 
 Un índice único parcial sobre `shopping_cycles(household_id) WHERE status = 'ACTIVE'` garantiza en
 la propia base que cada hogar tenga como máximo un ciclo activo.
@@ -44,6 +46,18 @@ también `product_preferences.category` nullable: `NULL` significa que una prefe
 aún no tiene una corrección aprendida y permite recurrir al clasificador local. Ambos campos tienen
 un `CHECK` con los códigos estables de `ProductCategory`.
 
+## Importación Carrefour
+
+`0005` extiende las tablas de Prompt 6 sin duplicarlas. `external_products.category` conserva la
+taxonomía comercial y `visual_category` guarda el mapping visual. Los precios incorporan unidad,
+canal y scope geográfico; las ofertas incorporan tipo estructurado, porcentaje, cantidades de
+multicompra, canal y fidelización. `import_runs` usa `RUNNING`, `SUCCESS`, `PARTIAL` y `FAILED`.
+
+El canal público observado es online, por lo que se persiste bajo el ámbito lógico
+`carrefour-online-es`, nunca como stock ni como precio de Carrefour Zafra. El histórico añade un
+snapshot sólo cuando cambia precio o precio unitario. Las ofertas se actualizan por su clave natural
+y las expiradas se conservan, pero la consulta activa aplica ambos límites de vigencia.
+
 ## Atomicidad
 
 - Bootstrap: household, singleton, primer device y primer ciclo en un lote.
@@ -61,6 +75,6 @@ npm run db:setup:local
 ```
 
 El seed `database/seeds/0001_supermarkets.sql` es idempotente. La migración `0003` está aplicada en
-D1 local y remota; no contiene fixtures ni datos comerciales. `0004` se ha validado únicamente en
-D1 local y no se aplicará de forma remota hasta un despliegue explícitamente autorizado. Los
-fixtures de Prompt 6 viven sólo en los proveedores de código y se identifican como demostración.
+D1 local y remota; no contiene fixtures ni datos comerciales. `0004` está aplicada local y
+remotamente. `0005` se valida primero en D1 local antes de cualquier despliegue. Los fixtures viven
+sólo en código/pruebas y nunca se cargan mediante una migración.

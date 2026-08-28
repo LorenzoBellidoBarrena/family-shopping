@@ -1,10 +1,22 @@
 # Progreso
 
-## Fase actual: categorías visuales de producto (incremental sobre Prompt 6)
+## Fase actual: fundamento real de Carrefour
 
 Estado: completado y desplegado en producción el 28 de agosto de 2026.
 
 ### Implementado
+
+- Fase 1 publicada y aislada en el commit `3dcf317`; D1 `0001`–`0004`, PWA, Worker, Static Assets,
+  Durable Object SQLite y smoke tests verdes.
+- Migración aditiva `0005_carrefour_import_foundation.sql` validada en D1 local.
+- `CarrefourProvider` con discovery/fetch/parser/normalización separados, allowlist, timeout y límite
+  de tamaño; no evade el bloqueo observado en la fuente.
+- `import_runs`, histórico de precios por cambio y promociones estructuradas e idempotentes.
+- Fixtures mínimos de precio normal, directo, 3x2, segunda unidad, cashback y sitemap/paginación.
+- Endpoints administrativos con `IMPORT_ADMIN_KEY` independiente del device token.
+- Handler scheduled preparado, feature flag desactivado y ningún cron configurado.
+- Código de la fundación desplegado sin ejecutar imports remotos; producción conserva cero
+  `import_runs` y cero `external_products`.
 
 - `ProductCategory` compartido con 20 códigos estables y configuración central de label, emoji y
   orden futuro.
@@ -48,7 +60,8 @@ Estado: completado y desplegado en producción el 28 de agosto de 2026.
 ### Verificación
 
 - 27 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden y caché offline.
-- 29 pruebas Worker/D1, incluidas preferencias de categoría, validación, carry, WebSocket y 404 API.
+- 41 pruebas Worker/D1, incluidas lista, WebSocket, parser Carrefour, seguridad, import e
+  idempotencia.
 - Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.
@@ -82,12 +95,18 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
   `200`; `/api/unknown` devuelve JSON `404`; API privada y upgrade WebSocket con credencial inválida
   devuelven `401`; `/ws` sin upgrade devuelve `426`.
 - PWA publicada con `display: standalone`, HTTPS y mismo origen para Angular, API y WebSocket.
+- Migración remota `0005_carrefour_import_foundation.sql` aplicada; no quedan pendientes.
+- Fundación Carrefour desplegada en la versión `12a5eb2a-b17e-4e30-a193-2c82f6de74e3` con
+  `SUPERMARKET_FEATURE_ENABLED=false`, `crons: []` y sin `IMPORT_ADMIN_KEY`.
+- Smoke posterior: lista y `/pair` `200`, salud `200`, API desconocida JSON `404` y endpoints de
+  importación `503` por configuración deliberadamente ausente.
 
 ### Deliberadamente pendiente
 
 - Reglas nativas remotas de rate limiting.
 - Revocación explícita de dispositivos y Content Security Policy endurecida.
-- Extractores y ofertas reales: requieren permiso o feed oficial; no se implementó scraping.
+- Descarga real de Carrefour: la fuente pública bloqueó la petición conservadora; requiere permiso
+  o feed oficial. No se intentó evasión y no se importó ningún dato remoto.
 - Comparador `¿Dónde sale más barato?`, hasta disponer de datos equivalentes y completos.
 
 ### Acción manual

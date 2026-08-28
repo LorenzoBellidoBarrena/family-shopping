@@ -17,5 +17,7 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HouseholdCoordinator"] }],
   "vars": {
     "HOUSEHOLD_ACCESS_KEY": "integration-test-access-key",
+    "IMPORT_ADMIN_KEY": "integration-test-import-admin-key",
+    "SUPERMARKET_FEATURE_ENABLED": "false",
   },
 }

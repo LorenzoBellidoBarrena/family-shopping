@@ -110,3 +110,17 @@ como SHA-256 y se consume una vez mediante el endpoint público `POST /api/pairi
 
 El consumo no lleva `Authorization`: el código temporal es la credencial limitada de ese flujo. La
 respuesta contiene un device token nuevo; nunca reutiliza ni copia el token del dispositivo creador.
+
+## Administración de imports
+
+Los endpoints de importación usan `x-import-admin-key` con el secret independiente
+`IMPORT_ADMIN_KEY`; un device token familiar no concede permisos administrativos.
+
+| Método | Ruta                           | Resultado                           |
+| ------ | ------------------------------ | ----------------------------------- |
+| `GET`  | `/api/admin/imports`           | Últimas ejecuciones y métricas.     |
+| `POST` | `/api/admin/imports/carrefour` | Import manual acotado de Carrefour. |
+
+El `POST` admite `limit=1..20` y además exige `SUPERMARKET_FEATURE_ENABLED=true`. Producción lo
+mantiene en `false` y no tiene `IMPORT_ADMIN_KEY` configurado todavía. Las respuestas nunca incluyen
+HTML remoto, cookies, stack traces ni secretos.

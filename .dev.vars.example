@@ -1,3 +1,5 @@
 # Copia este archivo como .dev.vars para probar el bootstrap local.
 # Sustituye el placeholder; no reutilices una clave real de producción.
 HOUSEHOLD_ACCESS_KEY="REPLACE_WITH_LOCAL_ACCESS_KEY"
+# Sólo para probar manualmente endpoints de importación local; no reutilizar en producción.
+IMPORT_ADMIN_KEY="REPLACE_WITH_LOCAL_IMPORT_ADMIN_KEY"

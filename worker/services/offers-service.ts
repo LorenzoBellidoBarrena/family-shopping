@@ -5,7 +5,7 @@ import {
 } from '../domain/supermarkets';
 import type { Device } from '../domain/types';
 import { badRequest } from '../errors';
-import { CarrefourProvider } from '../providers/carrefour-provider';
+import { CarrefourFixtureProvider } from '../providers/carrefour-fixture-provider';
 import { DiaProvider } from '../providers/dia-provider';
 import { LidlProvider } from '../providers/lidl-provider';
 import { MercadonaProvider } from '../providers/mercadona-provider';
@@ -19,7 +19,7 @@ interface OffersRepository {
 const defaultProviders = (): SupermarketProvider[] => [
   new LidlProvider(),
   new MercadonaProvider(),
-  new CarrefourProvider(),
+  new CarrefourFixtureProvider(),
   new DiaProvider(),
 ];
 

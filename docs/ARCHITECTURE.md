@@ -46,6 +46,11 @@ El store reemplaza items en su índice actual al marcar o editar, por lo que nun
 - `services/offers-service.ts`: agrega proveedores con tolerancia a fallos y relaciona ofertas.
 - `providers/*-provider.ts`: adaptadores independientes de Lidl, Mercadona, Carrefour y DIA.
 - `domain/supermarkets.ts`: contrato `SupermarketProvider` y tipos de catálogo independientes.
+- `domain/supermarket-import.ts`: contrato real de discovery, fetch, parsing y normalización.
+- `providers/carrefour-import-provider.ts`: implementación pública allowlisted; `CarrefourProvider`
+  es su exportación estable y el proveedor demo queda separado como fixture.
+- `services/supermarket-import-service.ts`: orquestación tolerante a errores y métricas parciales.
+- `repositories/supermarket-import-repository.ts`: persistencia D1 e idempotencia de snapshots.
 
 `GET /api/offers` forma una rama independiente del dominio de lista. Consulta proveedores con
 `Promise.allSettled`, de modo que un fallo sólo marca la respuesta como parcial. El esquema D1 está
@@ -56,6 +61,12 @@ D1 es la fuente persistente de verdad. Los cierres, la creación del siguiente c
 pendientes se confirman en un único `D1.batch`. El Durable Object no guarda una copia del dominio:
 usa WebSocket Hibernation y difunde eventos sólo después de confirmar D1. Si falla una difusión, la
 mutación REST permanece válida y la siguiente reconexión recupera el estado canónico.
+
+El importador es una rama administrativa independiente. Sus fallos no atraviesan el store Angular,
+las rutas de lista, pairing ni el Durable Object. Sólo acepta hosts y rutas Carrefour predefinidos,
+limita URLs descubiertas, tiempo y tamaño de respuesta, valida datos en runtime y persiste SQL
+parametrizado. Existe handler `scheduled`, pero `triggers.crons` está vacío y el feature flag está
+desactivado.
 
 ## Categoría visual de producto
 

@@ -39,9 +39,9 @@ const testEnv = env as unknown as TestEnv;
 
 const api = async (
   path: string,
-  options: { method?: string; body?: unknown; token?: string } = {},
+  options: { method?: string; body?: unknown; token?: string; headers?: HeadersInit } = {},
 ): Promise<Response> => {
-  const headers = new Headers();
+  const headers = new Headers(options.headers);
   if (options.body !== undefined) headers.set('content-type', 'application/json');
   if (options.token) headers.set('authorization', `Bearer ${options.token}`);
   const request = new Request(`https://example.test${path}`, {
@@ -523,6 +523,25 @@ describe('device pairing', () => {
 });
 
 describe('supermarket offers module', () => {
+  it('protects import administration with a separate secret and disabled feature flag', async () => {
+    const unauthorized = await api('/api/admin/imports');
+    const listing = await api('/api/admin/imports', {
+      headers: { 'x-import-admin-key': 'integration-test-import-admin-key' },
+    });
+    const disabled = await api('/api/admin/imports/carrefour', {
+      method: 'POST',
+      headers: { 'x-import-admin-key': 'integration-test-import-admin-key' },
+    });
+
+    expect(unauthorized.status).toBe(401);
+    expect(listing.status).toBe(200);
+    expect(await readJson<{ imports: unknown[] }>(listing)).toEqual({ imports: [] });
+    expect(disabled.status).toBe(503);
+    expect(await readJson<{ error: { code: string } }>(disabled)).toMatchObject({
+      error: { code: 'SUPERMARKET_FEATURE_DISABLED' },
+    });
+  });
+
   it('requires authorization and validates the supermarket filter', async () => {
     const { token } = await bootstrap();
     const unauthorized = await api('/api/offers');

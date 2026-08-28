@@ -7,6 +7,7 @@ import { ShoppingService } from '../services/shopping-service';
 import { RealtimePublisher } from '../services/realtime-publisher';
 import { OffersService } from '../services/offers-service';
 import { readJsonObject } from '../validation';
+import { routeAdminImports } from './admin-import-router';
 
 const itemMatch = (pathname: string): { itemId: string; toggle: boolean } | null => {
   const match = /^\/api\/items\/([^/]+)(\/toggle)?$/u.exec(pathname);
@@ -28,6 +29,10 @@ export const routeApi = async (
 
   if (url.pathname === '/api/health') {
     return request.method === 'GET' ? jsonResponse({ status: 'ok' }) : methodNotAllowed(['GET']);
+  }
+
+  if (url.pathname === '/api/admin/imports' || url.pathname.startsWith('/api/admin/imports/')) {
+    return routeAdminImports(request, env);
   }
 
   if (url.pathname === '/api/bootstrap' || url.pathname === '/api/bootstrap/household') {
