@@ -1,4 +1,5 @@
 {
+  "_fixture": "SYNTHETIC: malformed products collection used only for defensive parser tests",
   "success": true,
   "flyer": { "subcategory": "Folletos de Alimentación", "products": "unexpected" }
 }

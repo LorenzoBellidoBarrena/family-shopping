@@ -20,8 +20,8 @@ importar precios de forma fiable el 28 de agosto de 2026.
   precios ni inventa scope de Zafra.
 - Dos imports reales locales: ambos `FAILED/LIDL_NO_VALID_PRODUCT`, 0 productos, 0 precios, 0
   ofertas y una única tienda idempotente. No procede validación manual de diez precios.
-- Seis fixtures Lidl: cinco fragmentos reales mínimos y uno sintético rotulado para probar el
-  contrato estructurado futuro; el fixture demo visible continúa aislado.
+- Seis fixtures Lidl: cuatro fragmentos reales mínimos y dos sintéticos rotulados para probar el
+  contrato estructurado futuro y datos malformados; el fixture demo visible continúa aislado.
 - No se creó migración `0007`, no se desplegó, no se importó remotamente, el feature flag sigue en
   `false` y el cron sigue vacío.
 

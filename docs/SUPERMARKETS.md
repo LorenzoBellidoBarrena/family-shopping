@@ -221,11 +221,12 @@ y prohíbe su reproducción comercial sin autorización. Aunque esta aplicación
 fue mínima, antes de una importación periódica o de producción se debe obtener autorización o un feed
 estructurado; no se descargan ni redistribuyen PDFs/imágenes completos.
 
-Los fixtures `overview-real`, `store-zafra-real`, `current-food-real`, `next-food-real` y `malformed`
-son fragmentos mínimos de respuestas públicas. `structured-products.synthetic` está rotulado como
-sintético y sólo verifica cómo se normalizarían euros explícitos, €/kg o €/l, precio directo, Lidl
-Plus, 3x2 y segunda unidad si la fuente pública incorporase productos estructurados. No demuestra que
-esas promociones estuvieran presentes como registros importables en los folletos actuales.
+Los fixtures `overview-real`, `store-zafra-real`, `current-food-real` y `next-food-real` son
+fragmentos mínimos de respuestas públicas. `structured-products.synthetic` y `malformed` están
+rotulados como sintéticos: verifican respectivamente cómo se normalizarían euros explícitos, €/kg o
+€/l, precio directo, Lidl Plus, 3x2 y segunda unidad, y cómo se rechaza una colección inválida. No
+demuestran que esas promociones estuvieran presentes como registros importables en los folletos
+actuales.
 
 El import real local se ejecutó dos veces: tienda 1, productos 0, precios 0 y ofertas 0 en ambas
 pasadas; `import_runs` registró `FAILED/LIDL_NO_VALID_PRODUCT` sin duplicar la tienda. Por tanto no se
