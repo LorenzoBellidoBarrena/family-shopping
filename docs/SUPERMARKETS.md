@@ -193,3 +193,41 @@ con fixtures sean correctos.
 - Precio histórico sólo se inserta cuando cambia; producto y oferta usan upsert idempotente.
 - `scheduled()` está preparado, pero `crons: []`. Cloudflare Cron usa UTC; no se fija todavía una
   hora para evitar errores con el horario Europe/Madrid.
+
+## Implementación y evaluación Lidl
+
+`LidlProvider` usa como origen estable la
+[página oficial de folletos](https://www.lidl.es/c/descubre-nuevas-ofertas-cada-semana-folletos-lidl/s10087402).
+De su sección «Folletos de Alimentación» descubre los identificadores vigentes y consulta el JSON
+público que consume el visor en `endpoints.leaflets.schwarz/v4/flyer`. El discovery del 28 de agosto
+de 2026 encontró el folleto 24/8–30/8 y el siguiente 31/8–6/9, y excluyó los dos folletos de bazar.
+
+La [tienda oficial de Zafra](https://www.lidl.es/s/es-ES/tiendas/zafra/c-torre-san-francisco-2a/)
+publica dirección, CP y coordenadas en JSON-LD, pero no un número de tienda. Se persiste el slug
+canónico `zafra-c-torre-san-francisco-2a` como identificador externo explícitamente limitado. El
+folleto usa región `0`; no demuestra selección de esa tienda ni precisión local, así que cualquier
+producto estructurado se marcaría `STORE/UNKNOWN`, nunca como precio confirmado de Zafra ni stock.
+
+La prueba mínima desde el runtime local de Cloudflare respondió HTTP 200 sin redirect. El endpoint
+del visor también respondió, pero los dos folletos contenían respectivamente 49 y 39 páginas,
+`products: []` y sólo imágenes/texto OCR. Cadenas como `2196 1756 1316` no conservan separadores ni
+relación inequívoca entre precio normal, oferta y Lidl Plus. Conforme al criterio de confianza, el
+provider rechaza esos datos y no usa OCR para persistir importes.
+
+El [`robots.txt`](https://www.lidl.es/robots.txt) no bloquea la página de folletos ni la de tienda,
+pero sí rutas de usuario, búsqueda y parámetros internos que el provider no consulta. El
+[aviso legal](https://www.lidl.es/c/aviso-legal/s10075786) reserva los derechos sobre los contenidos
+y prohíbe su reproducción comercial sin autorización. Aunque esta aplicación es privada y la prueba
+fue mínima, antes de una importación periódica o de producción se debe obtener autorización o un feed
+estructurado; no se descargan ni redistribuyen PDFs/imágenes completos.
+
+Los fixtures `overview-real`, `store-zafra-real`, `current-food-real`, `next-food-real` y `malformed`
+son fragmentos mínimos de respuestas públicas. `structured-products.synthetic` está rotulado como
+sintético y sólo verifica cómo se normalizarían euros explícitos, €/kg o €/l, precio directo, Lidl
+Plus, 3x2 y segunda unidad si la fuente pública incorporase productos estructurados. No demuestra que
+esas promociones estuvieran presentes como registros importables en los folletos actuales.
+
+El import real local se ejecutó dos veces: tienda 1, productos 0, precios 0 y ofertas 0 en ambas
+pasadas; `import_runs` registró `FAILED/LIDL_NO_VALID_PRODUCT` sin duplicar la tienda. Por tanto no se
+hizo una tabla manual de diez precios, no se ejecutó import remoto, no se activó la pestaña real y no
+se modificaron DIA ni Carrefour.

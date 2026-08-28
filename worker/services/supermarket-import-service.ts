@@ -1,6 +1,7 @@
 import type { ImportRun, SupermarketImportProvider } from '../domain/supermarket-import';
 import { CarrefourProvider } from '../providers/carrefour-provider';
 import { DiaProvider } from '../providers/dia-provider';
+import { LidlProvider } from '../providers/lidl-provider';
 import { SupermarketImportRepository } from '../repositories/supermarket-import-repository';
 import { validateImportedProduct } from './supermarket-import-validation';
 
@@ -31,6 +32,11 @@ export class SupermarketImportService {
 
   async importDia(limit = 20): Promise<ImportRun> {
     const provider = this.provider.providerId === 'dia' ? this.provider : new DiaProvider();
+    return this.importProvider(provider, limit);
+  }
+
+  async importLidl(limit = 20): Promise<ImportRun> {
+    const provider = this.provider.providerId === 'lidl' ? this.provider : new LidlProvider();
     return this.importProvider(provider, limit);
   }
 

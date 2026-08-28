@@ -89,7 +89,7 @@ export interface ImportedStore {
 }
 
 export interface SupermarketImportProvider {
-  readonly providerId: 'carrefour' | 'dia';
+  readonly providerId: 'carrefour' | 'dia' | 'lidl';
   readonly catalogStore: ImportedStore;
   discover(limit?: number): Promise<string[]>;
   fetch(sourceUrl: string): Promise<string>;

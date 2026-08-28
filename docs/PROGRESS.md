@@ -1,10 +1,29 @@
 # Progreso
 
-## Fase actual: evaluación del proveedor real DIA
+## Fase actual: evaluación del proveedor real Lidl
 
-Estado: implementación local completada; fuente remota no apta para producción el 28 de agosto de 2026.
+Estado: acceso remoto desde Cloudflare confirmado, pero datos estructurados insuficientes para
+importar precios de forma fiable el 28 de agosto de 2026.
 
 ### Implementado
+
+- `LidlProvider` real separado del fixture de UI y conectado al importador común y al endpoint
+  protegido `POST /api/admin/imports/lidl`.
+- Discovery dinámico de los dos folletos oficiales de alimentación (actual y siguiente), excluyendo
+  bazar; no hay URL de campaña hardcodeada como origen permanente.
+- Tienda oficial confirmada en C. Torre San Francisco 2A, 06300 Zafra; slug canónico usado como ID
+  público porque la página no publica un número de tienda.
+- Fetch mínimo desde Cloudflare: HTTP 200, sin redirect, 172096 bytes y folleto alimentario
+  detectado. Allowlist, timeout de 9 s, 1 MiB máximo, un reintento y redirects controlados.
+- El endpoint público del visor devuelve 49 páginas para el folleto actual y 39 para el siguiente,
+  pero `products: []`; sólo ofrece imágenes y OCR ambiguo. El parser no convierte esas cifras en
+  precios ni inventa scope de Zafra.
+- Dos imports reales locales: ambos `FAILED/LIDL_NO_VALID_PRODUCT`, 0 productos, 0 precios, 0
+  ofertas y una única tienda idempotente. No procede validación manual de diez precios.
+- Seis fixtures Lidl: cinco fragmentos reales mínimos y uno sintético rotulado para probar el
+  contrato estructurado futuro; el fixture demo visible continúa aislado.
+- No se creó migración `0007`, no se desplegó, no se importó remotamente, el feature flag sigue en
+  `false` y el cron sigue vacío.
 
 - `DiaProvider` real separado en discovery, fetch, parse, normalize, validación y persistencia.
 - Discovery estable de `/ofertas` y del localizador oficial de Zafra, sin URLs de campaña fechadas.
@@ -74,8 +93,8 @@ Estado: implementación local completada; fuente remota no apta para producción
 ### Verificación
 
 - 27 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden y caché offline.
-- 51 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA, seguridad, import e
-  idempotencia; 27 pruebas Angular, 78 en total.
+- 60 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import e
+  idempotencia; 27 pruebas Angular, 87 en total.
 - Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.

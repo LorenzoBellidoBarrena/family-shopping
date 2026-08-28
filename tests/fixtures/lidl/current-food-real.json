@@ -1,0 +1,19 @@
+{
+  "version": 4,
+  "success": true,
+  "message": "Requested Flyer found.",
+  "numberOfEntries": 1,
+  "flyer": {
+    "id": "019fef9e-46f1-7ecb-a1f6-39de23b7eb58",
+    "name": "FOLLETO ALIMENTACIÓN 24/8",
+    "title": "24/8/26-30/8/26",
+    "subcategory": "Folletos de Alimentación",
+    "regions": [{ "code": "0" }],
+    "startDate": "2026-08-17",
+    "endDate": "2026-08-30",
+    "offerStartDate": "2026-08-24",
+    "offerEndDate": "2026-08-30",
+    "pages": [{ "number": 1, "keyWords": "Ahorra Doble Lidl Plus Ciruela Roja 2196 1756 1316" }],
+    "products": []
+  }
+}

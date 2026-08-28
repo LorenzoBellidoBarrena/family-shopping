@@ -1,0 +1,40 @@
+{
+  "_fixture": "SYNTHETIC: validates the conservative structured-product parser; not current Lidl data",
+  "success": true,
+  "flyer": {
+    "subcategory": "Folletos de Alimentación",
+    "offerStartDate": "2026-08-24",
+    "offerEndDate": "2026-08-30",
+    "products": [
+      {
+        "id": "synthetic-leche-1l",
+        "title": "Leche semidesnatada Milbona 1 l",
+        "brand": "Milbona",
+        "category": "Lácteos > Leche",
+        "price": "0,80 €",
+        "normalPrice": "0,84 €",
+        "unitPrice": "0,80 €/l"
+      },
+      {
+        "id": "synthetic-ciruela",
+        "title": "Ciruela roja 1 kg",
+        "price": "1,31 €",
+        "normalPrice": "2,19 €",
+        "unitPrice": "1,31 €/kg",
+        "promotion": "Lidl Plus -40%"
+      },
+      {
+        "id": "synthetic-huevos",
+        "title": "Huevos frescos 12 unidades",
+        "price": "2,49 €",
+        "promotion": "3x2"
+      },
+      {
+        "id": "synthetic-yogur",
+        "title": "Yogur natural 4 unidades",
+        "price": "1,29 €",
+        "promotion": "2ª unidad -50%"
+      }
+    ]
+  }
+}

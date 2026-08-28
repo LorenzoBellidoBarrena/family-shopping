@@ -121,6 +121,7 @@ Los endpoints de importación usan `x-import-admin-key` con el secret independie
 | `GET`  | `/api/admin/imports`           | Últimas ejecuciones y métricas.     |
 | `POST` | `/api/admin/imports/carrefour` | Import manual acotado de Carrefour. |
 | `POST` | `/api/admin/imports/dia`       | Import manual acotado de DIA.       |
+| `POST` | `/api/admin/imports/lidl`      | Import manual acotado de Lidl.      |
 
 El `POST` admite `limit=1..20` y además exige `SUPERMARKET_FEATURE_ENABLED=true`. Producción lo
 mantiene en `false` y no tiene `IMPORT_ADMIN_KEY` configurado todavía. Las respuestas nunca incluyen
@@ -130,3 +131,8 @@ El endpoint DIA descubre las tiendas oficiales de Zafra y consulta la página p�
 Los precios de esta última se etiquetan `ONLINE`; no se atribuyen a una tienda física. En la
 validación del 28 de agosto de 2026, DIA redirigió las peticiones desde el runtime Cloudflare a
 `/error`, por lo que la ejecución termina de forma encapsulada en `FAILED` y no persiste productos.
+
+El endpoint Lidl descubre dinámicamente los folletos de alimentación actual y siguiente y la tienda
+oficial de Zafra. El visor público responde desde Cloudflare, pero actualmente devuelve páginas y
+texto OCR con `products: []`; por ello la ejecución termina de forma segura en `FAILED` con
+`LIDL_NO_VALID_PRODUCT`, sin interpretar cifras OCR ambiguas ni atribuir precios a Zafra.

@@ -7,7 +7,7 @@ import type { Device } from '../domain/types';
 import { badRequest } from '../errors';
 import { CarrefourFixtureProvider } from '../providers/carrefour-fixture-provider';
 import { DiaFixtureProvider } from '../providers/dia-fixture-provider';
-import { LidlProvider } from '../providers/lidl-provider';
+import { LidlFixtureProvider } from '../providers/lidl-fixture-provider';
 import { MercadonaProvider } from '../providers/mercadona-provider';
 import { D1Repository } from '../repositories/d1-repository';
 import { productsMatch } from './product-matching';
@@ -17,7 +17,7 @@ interface OffersRepository {
 }
 
 const defaultProviders = (): SupermarketProvider[] => [
-  new LidlProvider(),
+  new LidlFixtureProvider(),
   new MercadonaProvider(),
   new CarrefourFixtureProvider(),
   new DiaFixtureProvider(),

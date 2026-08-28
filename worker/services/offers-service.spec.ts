@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogOffer, SupermarketProvider } from '../domain/supermarkets';
 import type { ShoppingCycle } from '../domain/types';
-import { LidlProvider } from '../providers/lidl-provider';
+import { LidlFixtureProvider } from '../providers/lidl-fixture-provider';
 import { OffersService } from './offers-service';
 import { productsMatch } from './product-matching';
 
@@ -38,7 +38,7 @@ describe('offers providers and product matching', () => {
       listPublishedOffers: () => Promise.reject(new Error('fixture provider unavailable')),
     };
     const service = new OffersService({ getActiveCycle: async () => cycle }, [
-      new LidlProvider(),
+      new LidlFixtureProvider(),
       failingProvider,
     ]);
 

@@ -49,6 +49,8 @@ El store reemplaza items en su índice actual al marcar o editar, por lo que nun
 - `domain/supermarket-import.ts`: contrato real de discovery, fetch, parsing y normalización.
 - `providers/carrefour-import-provider.ts`: implementación pública allowlisted; `CarrefourProvider`
   es su exportación estable y el proveedor demo queda separado como fixture.
+- `providers/lidl-provider.ts`: discovery oficial de folletos/tienda, fetch allowlisted y parser
+  conservador; `lidl-fixture-provider.ts` mantiene separada la demostración de la pestaña Ofertas.
 - `services/supermarket-import-service.ts`: orquestación tolerante a errores y métricas parciales.
 - `repositories/supermarket-import-repository.ts`: persistencia D1 e idempotencia de snapshots.
 
@@ -65,8 +67,9 @@ mutación REST permanece válida y la siguiente reconexión recupera el estado c
 El importador es una rama administrativa independiente. Sus fallos no atraviesan el store Angular,
 las rutas de lista, pairing ni el Durable Object. Sólo acepta hosts y rutas Carrefour predefinidos,
 limita URLs descubiertas, tiempo y tamaño de respuesta, valida datos en runtime y persiste SQL
-parametrizado. Existe handler `scheduled`, pero `triggers.crons` está vacío y el feature flag está
-desactivado.
+parametrizado. Lidl añade la allowlist de `www.lidl.es` y `endpoints.leaflets.schwarz`, usada por el
+visor oficial, sin dar acceso a URLs proporcionadas por el usuario. Existe handler `scheduled`, pero
+`triggers.crons` está vacío y el feature flag está desactivado.
 
 ## Categoría visual de producto
 

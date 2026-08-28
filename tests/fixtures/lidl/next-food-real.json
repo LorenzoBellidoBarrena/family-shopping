@@ -1,0 +1,19 @@
+{
+  "version": 4,
+  "success": true,
+  "message": "Requested Flyer found.",
+  "numberOfEntries": 1,
+  "flyer": {
+    "id": "01a01412-0b5e-741e-8095-ee9c52230117",
+    "name": "FOLLETO ALIMENTACIÓN 31/8",
+    "title": "31/8/26-6/9/26",
+    "subcategory": "Folletos de Alimentación",
+    "regions": [{ "code": "0" }],
+    "startDate": "2026-08-24",
+    "endDate": "2026-09-06",
+    "offerStartDate": "2026-08-31",
+    "offerEndDate": "2026-09-06",
+    "pages": [{ "number": 1, "keyWords": "Dobla Tus Puntos Lidl Plus Salmón Ahumado 3391 2495" }],
+    "products": []
+  }
+}

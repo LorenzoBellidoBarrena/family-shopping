@@ -70,6 +70,19 @@ Las tres tiendas de Zafra usan sus IDs públicos DIA. El catálogo online se per
 responde, bajo `dia-online-es`; una publicación significa catálogo, nunca stock. No existen tablas ni
 columnas específicas de DIA.
 
+## Importación Lidl
+
+Lidl reutiliza sin cambios `stores`, `external_products`, `store_products`, `product_prices`,
+`offers` e `import_runs`; no se ha creado una migración `0007`. El localizador oficial permite
+guardar la tienda de Zafra mediante el slug canónico público porque la página no expone un número de
+tienda. Las coordenadas sólo se guardan porque aparecen explícitamente en su JSON-LD.
+
+El catálogo lógico `leaflets-es-region-0` representa el folleto general y nunca stock. Sólo se crea
+si existe al menos un producto con precio estructurado válido. La región pública `0` no demuestra
+pertenencia a Zafra, por lo que el scope de precios sería `UNKNOWN`, no `STORE`. En la ejecución real
+del 28 de agosto de 2026 no se persistieron productos, precios ni ofertas: el endpoint devolvió
+`products: []` y el import se cerró como `FAILED`.
+
 ## Atomicidad
 
 - Bootstrap: household, singleton, primer device y primer ciclo en un lote.
@@ -88,5 +101,5 @@ npm run db:setup:local
 
 El seed `database/seeds/0001_supermarkets.sql` es idempotente. Las migraciones `0003`, `0004` y
 `0005` están aplicadas local y remotamente. `0006` sólo está aplicada en D1 local en esta tarea; no
-se ha desplegado ni aplicado remotamente. Los fixtures viven sólo en código/pruebas y nunca se
-cargan mediante una migración.
+se ha desplegado ni aplicado remotamente. Lidl no requiere `0007`. Los fixtures viven sólo en
+código/pruebas y nunca se cargan mediante una migración.
