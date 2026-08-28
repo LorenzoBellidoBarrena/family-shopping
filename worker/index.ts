@@ -2,6 +2,7 @@ import type { Env } from './env';
 import { errorResponse } from './http';
 import { routeApi } from './routes/api-router';
 import { routeWebSocket } from './routes/websocket-router';
+import { withSecurityHeaders } from './security/response-headers';
 
 export { HouseholdCoordinator } from './durable-objects/household-coordinator';
 export type { Env } from './env';
@@ -12,9 +13,9 @@ export const worker: ExportedHandler<Env> = {
 
     if (pathname === '/api' || pathname.startsWith('/api/')) {
       try {
-        return await routeApi(request, env, context);
+        return withSecurityHeaders(request, await routeApi(request, env, context));
       } catch (error) {
-        return errorResponse(error);
+        return withSecurityHeaders(request, errorResponse(error));
       }
     }
 
@@ -26,7 +27,7 @@ export const worker: ExportedHandler<Env> = {
       }
     }
 
-    return env.ASSETS.fetch(request);
+    return withSecurityHeaders(request, await env.ASSETS.fetch(request));
   },
 };
 

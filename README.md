@@ -1,5 +1,7 @@
 # Family Shopping
 
+Producción: <https://family-shopping.lorenzo-bellido-b.workers.dev>
+
 Aplicación familiar privada y mobile-first para compartir una lista de la compra. Angular y la API
 de Cloudflare Workers se publican bajo un único origen. Durable Objects distribuye cambios en tiempo
 real por hogar y D1 permanece como fuente de verdad.
@@ -7,6 +9,9 @@ real por hogar y D1 permanece como fuente de verdad.
 La interfaz permite añadir, editar, marcar, eliminar, completar o vaciar la lista, recuperar
 preferencias y vincular móviles por QR. Es instalable como PWA, conserva la última lista en
 IndexedDB y permite marcar productos sin conexión para sincronizarlos después.
+
+La pestaña Ofertas incluye por ahora datos demostrativos y una arquitectura de proveedores aislada.
+No muestra stock ni precios reales. Consulta [docs/SUPERMARKETS.md](docs/SUPERMARKETS.md).
 
 ## Requisitos
 
@@ -49,7 +54,7 @@ del Worker no está disponible.
 | `npm run start`            | Servidor Angular con HMR, sin Worker.                              |
 | `npm run dev`              | Compila Angular e inicia Worker, Static Assets y bindings locales. |
 | `npm run build`            | Build Angular de producción.                                       |
-| `npm run test`             | 11 pruebas Angular y 18 integraciones Worker/D1.                   |
+| `npm run test`             | 15 pruebas Angular y 25 pruebas Worker/D1.                         |
 | `npm run lint`             | ESLint para Angular, plantillas y Worker.                          |
 | `npm run typecheck`        | TypeScript estricto de frontend, Worker y pruebas.                 |
 | `npm run format:check`     | Comprueba Prettier sin modificar archivos.                         |
@@ -59,9 +64,12 @@ del Worker no está disponible.
 | `npm run db:setup:local`   | Ejecuta migraciones y seed locales.                                |
 | `npm run deploy`           | Build y despliegue; requiere configuración remota real.            |
 
-No se ha creado ninguna base remota. `wrangler.jsonc` conserva
-`REPLACE_WITH_D1_DATABASE_ID` hasta que Cloudflare devuelva un ID real en la fase de producción.
+La base D1 remota `family-shopping-db` y su binding real están configurados en `wrangler.jsonc`.
+Las migraciones remotas se aplican de forma explícita antes de cada despliegue que las necesite.
 
 Consulta [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATABASE.md](docs/DATABASE.md),
-[docs/API.md](docs/API.md), [docs/OFFLINE.md](docs/OFFLINE.md) y
-[docs/PROGRESS.md](docs/PROGRESS.md).
+[docs/API.md](docs/API.md), [docs/OFFLINE.md](docs/OFFLINE.md),
+[docs/SUPERMARKETS.md](docs/SUPERMARKETS.md) y
+[docs/PROGRESS.md](docs/PROGRESS.md). La prueba manual de dos navegadores está en
+[docs/PAIRING_TEST.md](docs/PAIRING_TEST.md) y el procedimiento de producción en
+[docs/PRODUCTION.md](docs/PRODUCTION.md).

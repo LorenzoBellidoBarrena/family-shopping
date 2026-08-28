@@ -1,3 +1,7 @@
+import type { ProductCategory } from '../../shared/product-category';
+
+export type { ProductCategory } from '../../shared/product-category';
+
 export const UNITS = [
   'unidad',
   'pack',
@@ -21,6 +25,7 @@ export interface ShoppingItem {
   quantity: string;
   unit: Unit;
   supermarketId: string | null;
+  category: ProductCategory;
   checked: boolean;
   sortOrder: number;
   createdAt: string;
@@ -49,10 +54,44 @@ export interface ProductPreference {
   normalizedName: string;
   name: string;
   supermarketId: string | null;
+  category: ProductCategory;
   unit: Unit;
   quantity: string;
   useCount: number;
   updatedAt: string;
+}
+
+export const OFFER_SUPERMARKET_IDS = ['lidl', 'mercadona', 'carrefour', 'dia'] as const;
+export type OfferSupermarketId = (typeof OFFER_SUPERMARKET_IDS)[number];
+
+export interface CatalogOffer {
+  id: string;
+  supermarketId: OfferSupermarketId;
+  supermarketName: string;
+  storeName: string;
+  city: string;
+  productName: string;
+  normalizedProductName: string;
+  brand: string | null;
+  category: string | null;
+  packageLabel: string | null;
+  normalPriceCents: number | null;
+  offerPriceCents: number;
+  unitPriceCents: number | null;
+  promotionType: string;
+  validFrom: string;
+  validUntil: string;
+  sourceUrl: string;
+  requiresLoyaltyCard: boolean;
+  catalogAvailability: 'PUBLISHED';
+  fixture: boolean;
+  relatedToList: boolean;
+  matchedItemNames: string[];
+}
+
+export interface OffersResponse {
+  offers: CatalogOffer[];
+  partial: boolean;
 }
 
 export interface ItemInput {
@@ -60,6 +99,7 @@ export interface ItemInput {
   quantity?: string;
   unit?: Unit;
   supermarketId?: string | null;
+  category?: ProductCategory;
 }
 
 export interface BootstrapInput {

@@ -1,3 +1,5 @@
+import type { ProductCategory } from '../../src/shared/product-category';
+
 export const UNITS = [
   'unidad',
   'pack',
@@ -43,6 +45,7 @@ export interface ShoppingItem {
   quantity: string;
   unit: Unit;
   supermarketId: string | null;
+  category: ProductCategory;
   checked: boolean;
   sortOrder: number;
   createdAt: string;
@@ -65,6 +68,7 @@ export interface ProductPreference {
   normalizedName: string;
   name: string;
   supermarketId: string | null;
+  category: ProductCategory;
   unit: Unit;
   quantity: string;
   useCount: number;
@@ -77,4 +81,5 @@ export interface ItemValues {
   quantityMilli: number;
   unit: Unit;
   supermarketId: string | null;
+  category: ProductCategory;
 }

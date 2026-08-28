@@ -5,8 +5,11 @@ import { App } from './app';
 import type {
   BootstrapInput,
   BootstrapResponse,
+  CatalogOffer,
   ClearAction,
   ItemInput,
+  OfferSupermarketId,
+  OffersResponse,
   PairingConsumeInput,
   ProductPreference,
   ShoppingCycle,
@@ -20,12 +23,14 @@ import { OfflineCacheService, type PendingToggle } from './core/offline-cache.se
 import { RealtimeService, type RealtimeStatus } from './core/realtime.service';
 import { ShoppingApiService } from './core/shopping-api.service';
 import { ShoppingStore } from './state/shopping.store';
+import { classifyNormalizedProductName } from '../shared/product-category';
 
 const item = (id: string, name: string, sortOrder: number, checked = false): ShoppingItem => ({
   id,
   shoppingCycleId: 'cycle-1',
   name,
   normalizedName: name.toLowerCase(),
+  category: classifyNormalizedProductName(name.toLowerCase()),
   quantity: name === 'Leche' ? '6' : '1',
   unit: 'unidad',
   supermarketId: name === 'Leche' ? 'lidl' : null,
@@ -71,11 +76,38 @@ class FakeShoppingApi {
       id: 'habit-eggs',
       normalizedName: 'huevos',
       name: 'Huevos',
+      category: 'EGGS',
       supermarketId: 'mercadona',
       unit: 'caja',
       quantity: '1',
       useCount: 5,
       updatedAt: '2026-08-27T00:00:00.000Z',
+    },
+  ];
+  readonly offerData: CatalogOffer[] = [
+    {
+      id: 'lidl-milk',
+      supermarketId: 'lidl',
+      supermarketName: 'Lidl',
+      storeName: 'Lidl Zafra',
+      city: 'Zafra',
+      productName: 'Leche entera 1 litro',
+      normalizedProductName: 'leche entera 1 litro',
+      brand: 'Fixture Lidl',
+      category: 'Lácteos',
+      packageLabel: '1 l',
+      normalPriceCents: 105,
+      offerPriceCents: 89,
+      unitPriceCents: 89,
+      promotionType: 'Precio promocional de demostración',
+      validFrom: '2026-08-24',
+      validUntil: '2026-09-01',
+      sourceUrl: 'https://www.lidl.es/',
+      requiresLoyaltyCard: false,
+      catalogAvailability: 'PUBLISHED',
+      fixture: true,
+      relatedToList: true,
+      matchedItemNames: ['Leche'],
     },
   ];
 
@@ -84,6 +116,12 @@ class FakeShoppingApi {
   readonly getSuggestions = vi.fn(async (query = '') =>
     this.habits.filter((habit) => habit.normalizedName.startsWith(query.toLowerCase())),
   );
+  readonly getOffers = vi.fn(async (supermarket?: OfferSupermarketId): Promise<OffersResponse> => ({
+    offers: supermarket
+      ? this.offerData.filter((offer) => offer.supermarketId === supermarket)
+      : this.offerData,
+    partial: false,
+  }));
   readonly bootstrap = vi.fn(async (input: BootstrapInput): Promise<BootstrapResponse> => {
     void input;
     return {
@@ -110,6 +148,7 @@ class FakeShoppingApi {
       quantity: input.quantity ?? '1',
       unit: input.unit ?? 'unidad',
       supermarketId: input.supermarketId ?? null,
+      category: input.category ?? classifyNormalizedProductName(input.name.toLowerCase()),
     };
     this.serverCycle = { ...this.serverCycle, items: [...this.serverCycle.items, created] };
     return created;
@@ -126,6 +165,7 @@ class FakeShoppingApi {
           quantity: input.quantity ?? current.quantity,
           unit: input.unit ?? current.unit,
           supermarketId: input.supermarketId ?? null,
+          category: input.category ?? current.category,
         };
         return updated;
       }),
@@ -249,6 +289,7 @@ describe('Shopping list interface', () => {
 
     expect(rows).toHaveLength(2);
     expect(rows[0].textContent).toContain('Leche');
+    expect(rows[0].querySelector('.category-emoji')?.textContent?.trim()).toBe('🥛');
     expect(rows[0].textContent).toContain('6 unidades · Lidl');
     expect(rows[1].classList.contains('checked')).toBe(true);
     expect(rows[1].textContent).toContain('Sin supermercado');
@@ -268,7 +309,9 @@ describe('Shopping list interface', () => {
 
   it('toggles an item without moving it', async () => {
     const before = rowIds();
-    const firstCheck = fixture.nativeElement.querySelector('.check-button') as HTMLButtonElement;
+    const firstCheck = fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement;
+    expect(firstCheck.getAttribute('aria-label')).toContain('Leche, pendiente');
+    const emojiBefore = firstCheck.querySelector('.category-emoji')?.textContent?.trim();
     firstCheck.click();
     await settle();
 
@@ -277,14 +320,45 @@ describe('Shopping list interface', () => {
     expect(
       (fixture.nativeElement.querySelector('[data-item-id="milk"]') as HTMLElement).classList,
     ).toContain('checked');
+    const toggled = fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement;
+    expect(toggled.getAttribute('aria-label')).toContain('Leche, comprado');
+    expect(toggled.querySelector('.category-emoji')?.textContent?.trim()).toBe(emojiBefore);
+
+    toggled.click();
+    await settle();
+    expect(rowIds()).toEqual(before);
+    expect(
+      (fixture.nativeElement.querySelector('[data-item-id="milk"]') as HTMLElement).classList,
+    ).not.toContain('checked');
+  });
+
+  it('shows offer fixtures, highlights list matches, and filters by supermarket', async () => {
+    button('％ Ofertas').click();
+    await settle();
+
+    const card = fixture.nativeElement.querySelector('.offer-card') as HTMLElement;
+    expect(api.getOffers).toHaveBeenCalledWith(undefined);
+    expect(card.textContent).toContain('Leche entera 1 litro');
+    expect(card.textContent).toContain('Está en tu lista');
+    expect(card.textContent).toContain('disponibilidad no confirmada');
+
+    button('DIA').click();
+    await settle();
+    expect(api.getOffers).toHaveBeenLastCalledWith('dia');
+    expect(fixture.nativeElement.querySelectorAll('.offer-card')).toHaveLength(0);
   });
 
   it('edits a product with explicit controls', async () => {
     button('Editar').click();
     await settle();
     const input = fixture.nativeElement.querySelector('input[name="editName"]') as HTMLInputElement;
+    const category = fixture.nativeElement.querySelector(
+      'select[name="editCategory"]',
+    ) as HTMLSelectElement;
     input.value = 'Leche sin lactosa';
     input.dispatchEvent(new Event('input'));
+    category.value = 'OTHER';
+    category.dispatchEvent(new Event('change'));
     await settle();
     expect(input.value).toBe('Leche sin lactosa');
     button('Guardar').click();
@@ -292,13 +366,13 @@ describe('Shopping list interface', () => {
 
     expect(api.updateItem).toHaveBeenCalledWith(
       'milk',
-      expect.objectContaining({ name: 'Leche sin lactosa' }),
+      expect.objectContaining({ name: 'Leche sin lactosa', category: 'OTHER' }),
     );
     expect(fixture.nativeElement.textContent).toContain('Leche sin lactosa');
   });
 
   it('shows the completion dialog and creates a new list only after confirmation', async () => {
-    const firstCheck = fixture.nativeElement.querySelector('.check-button') as HTMLButtonElement;
+    const firstCheck = fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement;
     firstCheck.click();
     await settle();
 
@@ -329,7 +403,7 @@ describe('Shopping list interface', () => {
   });
 
   it('adds a habitual product with one touch', async () => {
-    button('＋ Huevos').click();
+    button('🥚 Huevos').click();
     await settle();
 
     expect(api.addItem).toHaveBeenCalledWith({
@@ -337,6 +411,7 @@ describe('Shopping list interface', () => {
       quantity: '1',
       unit: 'caja',
       supermarketId: 'mercadona',
+      category: 'EGGS',
     });
     expect(fixture.nativeElement.textContent).toContain('Huevos');
   });
@@ -371,7 +446,7 @@ describe('Shopping list interface', () => {
     network.online.set(false);
     fixture.detectChanges();
     const before = rowIds();
-    (fixture.nativeElement.querySelector('.check-button') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement).click();
     await settle();
 
     expect(api.toggleItem).not.toHaveBeenCalled();
@@ -383,7 +458,7 @@ describe('Shopping list interface', () => {
   it('reconciles queued desired state against D1 after reconnecting', async () => {
     network.online.set(false);
     fixture.detectChanges();
-    (fixture.nativeElement.querySelector('.check-button') as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement).click();
     await settle();
 
     network.online.set(true);

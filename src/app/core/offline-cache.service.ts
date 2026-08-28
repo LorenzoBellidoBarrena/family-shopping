@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import type { ShoppingCycle } from './api.models';
+import { isProductCategory } from '../../shared/product-category';
 
 export interface PendingToggle {
   itemId: string;
@@ -18,11 +19,14 @@ export class OfflineCacheService {
 
   async loadCycle(): Promise<ShoppingCycle | null> {
     const database = await this.database();
-    if (!database) return this.clone(this.memoryCycle);
+    if (!database) {
+      const value = this.clone(this.memoryCycle);
+      return value ? this.normalizeCycle(value) : null;
+    }
     const value = await this.request<ShoppingCycle | undefined>(
       database.transaction('state').objectStore('state').get('active-cycle'),
     );
-    return value ? this.clone(value) : null;
+    return value ? this.normalizeCycle(this.clone(value)) : null;
   }
 
   async saveCycle(cycle: ShoppingCycle): Promise<void> {
@@ -110,5 +114,15 @@ export class OfflineCacheService {
 
   private clone<T>(value: T): T {
     return structuredClone(value);
+  }
+
+  private normalizeCycle(cycle: ShoppingCycle): ShoppingCycle {
+    return {
+      ...cycle,
+      items: cycle.items.map((item) => ({
+        ...item,
+        category: isProductCategory(item.category) ? item.category : 'OTHER',
+      })),
+    };
   }
 }

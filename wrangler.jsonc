@@ -4,17 +4,18 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-27",
   "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist/family-shopping/browser",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/ws/*"],
+    "run_worker_first": ["/api", "/api/*", "/ws", "/ws/*"],
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "family-shopping-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "2b8fa0c2-87c7-4e22-ac83-6f44110db302",
       "migrations_dir": "database/migrations",
     },
   ],

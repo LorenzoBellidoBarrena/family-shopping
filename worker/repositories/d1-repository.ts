@@ -1,4 +1,8 @@
 import { conflict, notFound } from '../errors';
+import {
+  classifyNormalizedProductName,
+  type ProductCategory,
+} from '../../src/shared/product-category';
 import type {
   ClearAction,
   Device,
@@ -44,6 +48,7 @@ interface ItemRow {
   quantity_milli: number;
   unit: Unit;
   supermarket_id: string | null;
+  category: ProductCategory;
   checked: number;
   sort_order: number;
   created_at: string;
@@ -64,6 +69,7 @@ interface PreferenceRow {
   last_supermarket_id: string | null;
   last_unit: Unit;
   last_quantity_milli: number;
+  category: ProductCategory | null;
   use_count: number;
   updated_at: string;
 }
@@ -91,6 +97,7 @@ const mapItem = (row: ItemRow): ShoppingItem => ({
   quantity: quantityMilliToString(row.quantity_milli),
   unit: row.unit,
   supermarketId: row.supermarket_id,
+  category: row.category,
   checked: row.checked === 1,
   sortOrder: row.sort_order,
   createdAt: row.created_at,
@@ -296,7 +303,7 @@ export class D1Repository {
     const { results } = await this.db
       .prepare(
         `SELECT id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
-                supermarket_id, checked, sort_order, created_at, updated_at, checked_at
+                supermarket_id, category, checked, sort_order, created_at, updated_at, checked_at
          FROM shopping_items WHERE shopping_cycle_id = ? ORDER BY sort_order, created_at, id`,
       )
       .bind(cycle.id)
@@ -316,7 +323,7 @@ export class D1Repository {
     const row = await this.db
       .prepare(
         `SELECT i.id, i.shopping_cycle_id, i.name, i.normalized_name, i.quantity_milli,
-                i.unit, i.supermarket_id, i.checked, i.sort_order, i.created_at,
+                i.unit, i.supermarket_id, i.category, i.checked, i.sort_order, i.created_at,
                 i.updated_at, i.checked_at
          FROM shopping_items i
          JOIN shopping_cycles c ON c.id = i.shopping_cycle_id
@@ -341,8 +348,8 @@ export class D1Repository {
         .prepare(
           `INSERT INTO shopping_items
              (id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
-              supermarket_id, checked, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 0,
+              supermarket_id, category, checked, sort_order, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0,
              (SELECT COALESCE(MAX(sort_order), 0) + 1000 FROM shopping_items
               WHERE shopping_cycle_id = ?), ?, ?)`,
         )
@@ -354,6 +361,7 @@ export class D1Repository {
           values.quantityMilli,
           values.unit,
           values.supermarketId,
+          values.category,
           cycle.id,
           now,
           now,
@@ -375,7 +383,7 @@ export class D1Repository {
       this.db
         .prepare(
           `UPDATE shopping_items SET name = ?, normalized_name = ?, quantity_milli = ?,
-             unit = ?, supermarket_id = ?, updated_at = ? WHERE id = ?`,
+             unit = ?, supermarket_id = ?, category = ?, updated_at = ? WHERE id = ?`,
         )
         .bind(
           values.name,
@@ -383,6 +391,7 @@ export class D1Repository {
           values.quantityMilli,
           values.unit,
           values.supermarketId,
+          values.category,
           now,
           itemId,
         ),
@@ -456,7 +465,7 @@ export class D1Repository {
     const { results } = await this.db
       .prepare(
         `SELECT id, normalized_name, display_name, last_supermarket_id, last_unit,
-                last_quantity_milli, use_count, updated_at
+                last_quantity_milli, category, use_count, updated_at
          FROM product_preferences
          WHERE household_id = ? AND normalized_name LIKE ? ESCAPE '\\'
          ORDER BY use_count DESC, updated_at DESC LIMIT ?`,
@@ -468,11 +477,26 @@ export class D1Repository {
       normalizedName: row.normalized_name,
       name: row.display_name,
       supermarketId: row.last_supermarket_id,
+      category: row.category ?? classifyNormalizedProductName(row.normalized_name),
       unit: row.last_unit,
       quantity: quantityMilliToString(row.last_quantity_milli),
       useCount: row.use_count,
       updatedAt: row.updated_at,
     }));
+  }
+
+  async getPreferenceCategory(
+    householdId: string,
+    normalizedName: string,
+  ): Promise<ProductCategory | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT category FROM product_preferences
+         WHERE household_id = ? AND normalized_name = ?`,
+      )
+      .bind(householdId, normalizedName)
+      .first<{ category: ProductCategory | null }>();
+    return row?.category ?? null;
   }
 
   private preferenceStatement(
@@ -486,13 +510,14 @@ export class D1Repository {
       .prepare(
         `INSERT INTO product_preferences
            (id, household_id, normalized_name, display_name, last_supermarket_id,
-            last_unit, last_quantity_milli, use_count, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            last_unit, last_quantity_milli, category, use_count, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
          ON CONFLICT(household_id, normalized_name) DO UPDATE SET
            display_name = excluded.display_name,
            last_supermarket_id = excluded.last_supermarket_id,
            last_unit = excluded.last_unit,
            last_quantity_milli = excluded.last_quantity_milli,
+           category = excluded.category,
            use_count = product_preferences.use_count + ?,
            updated_at = excluded.updated_at`,
       )
@@ -504,6 +529,7 @@ export class D1Repository {
         values.supermarketId,
         values.unit,
         values.quantityMilli,
+        values.category,
         now,
         now,
         increment ? 1 : 0,
@@ -538,8 +564,8 @@ export class D1Repository {
           .prepare(
             `INSERT INTO shopping_items
                (id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
-                supermarket_id, checked, sort_order, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+                supermarket_id, category, checked, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
           )
           .bind(
             crypto.randomUUID(),
@@ -549,6 +575,7 @@ export class D1Repository {
             this.quantityStringToMilli(item.quantity),
             item.unit,
             item.supermarketId,
+            item.category,
             item.sortOrder,
             now,
             now,

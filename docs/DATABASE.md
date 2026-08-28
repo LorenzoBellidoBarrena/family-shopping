@@ -1,7 +1,8 @@
 # Base de datos D1
 
-Las migraciones son `0001_initial_schema.sql` y `0002_realtime_revisions.sql`. Ambas han sido
-validadas con el runtime de pruebas oficial de Workers y con D1 local.
+Las migraciones son `0001_initial_schema.sql`, `0002_realtime_revisions.sql`,
+`0003_supermarket_catalog.sql` y `0004_product_categories.sql`. Se validan con el runtime de
+pruebas oficial de Workers y D1 local.
 
 ## Tablas
 
@@ -9,11 +10,18 @@ validadas con el runtime de pruebas oficial de Workers y con D1 local.
 - `app_state`: singleton que impide repetir o apropiarse del bootstrap.
 - `devices`: dispositivos autorizados y hashes SHA-256; nunca tokens en claro.
 - `shopping_cycles`: historial `ACTIVE`, `COMPLETED` y `CLEARED`.
-- `shopping_items`: productos ordenados dentro de cada ciclo.
+- `shopping_items`: productos ordenados dentro de cada ciclo, con categoría visual estable.
 - `supermarkets`: Lidl, Mercadona, Carrefour, DIA y Da igual.
-- `product_preferences`: últimos valores y frecuencia por nombre normalizado/hogar.
+- `product_preferences`: últimos valores, categoría aprendida y frecuencia por nombre
+  normalizado/hogar.
 - `pairing_codes`: hashes de códigos temporales, expiración y marca de uso.
 - `household_revisions`: secuencia creciente de eventos de sincronización por hogar.
+- `stores`: establecimientos o ámbitos comerciales, con geolocalización opcional.
+- `external_products`: catálogo publicado por cadena, EAN opcional y última observación.
+- `product_aliases`: equivalencias normalizadas revisables.
+- `store_products`: relación de publicación producto/tienda; no representa stock.
+- `product_prices`: histórico de precios en céntimos enteros.
+- `offers`: promociones, vigencia, fuente y requisito de tarjeta en céntimos enteros.
 
 Un índice único parcial sobre `shopping_cycles(household_id) WHERE status = 'ACTIVE'` garantiza en
 la propia base que cada hogar tenga como máximo un ciclo activo.
@@ -29,6 +37,12 @@ introducen errores binarios de precisión.
 Los nombres se normalizan quitando diacríticos, pasando a minúsculas y unificando separadores. La
 clave única `(household_id, normalized_name)` permite recordar supermercado, unidad y cantidad. La
 frecuencia aumenta al añadir el producto, no al editarlo.
+
+`0004_product_categories.sql` añade `shopping_items.category` como `NOT NULL DEFAULT 'OTHER'` y
+realiza así un backfill seguro de todos los items existentes sin reglas SQL lingüísticas. Añade
+también `product_preferences.category` nullable: `NULL` significa que una preferencia histórica
+aún no tiene una corrección aprendida y permite recurrir al clasificador local. Ambos campos tienen
+un `CHECK` con los códigos estables de `ProductCategory`.
 
 ## Atomicidad
 
@@ -46,5 +60,7 @@ ordenar y deduplicar avisos; nunca sustituye la lectura canónica del ciclo acti
 npm run db:setup:local
 ```
 
-El seed `database/seeds/0001_supermarkets.sql` es idempotente. No se han creado ni migrado recursos
-remotos y el `database_id` de producción continúa siendo un placeholder explícito.
+El seed `database/seeds/0001_supermarkets.sql` es idempotente. La migración `0003` está aplicada en
+D1 local y remota; no contiene fixtures ni datos comerciales. `0004` se ha validado únicamente en
+D1 local y no se aplicará de forma remota hasta un despliegue explícitamente autorizado. Los
+fixtures de Prompt 6 viven sólo en los proveedores de código y se identifican como demostración.

@@ -5,6 +5,7 @@ import { D1Repository } from '../repositories/d1-repository';
 import { AuthService } from '../services/auth-service';
 import { ShoppingService } from '../services/shopping-service';
 import { RealtimePublisher } from '../services/realtime-publisher';
+import { OffersService } from '../services/offers-service';
 import { readJsonObject } from '../validation';
 
 const itemMatch = (pathname: string): { itemId: string; toggle: boolean } | null => {
@@ -23,12 +24,13 @@ export const routeApi = async (
   const auth = new AuthService(repository, env.HOUSEHOLD_ACCESS_KEY);
   const shopping = new ShoppingService(repository);
   const realtime = new RealtimePublisher(env, repository, context);
+  const offers = new OffersService(repository);
 
   if (url.pathname === '/api/health') {
     return request.method === 'GET' ? jsonResponse({ status: 'ok' }) : methodNotAllowed(['GET']);
   }
 
-  if (url.pathname === '/api/bootstrap/household') {
+  if (url.pathname === '/api/bootstrap' || url.pathname === '/api/bootstrap/household') {
     if (request.method !== 'POST') return methodNotAllowed(['POST']);
     return jsonResponse(await auth.bootstrap(await readJsonObject(request)), 201);
   }
@@ -37,6 +39,19 @@ export const routeApi = async (
     if (request.method !== 'POST') return methodNotAllowed(['POST']);
     return jsonResponse(await auth.consumePairing(await readJsonObject(request)), 201);
   }
+
+  const matchedItem = itemMatch(url.pathname);
+  const knownPrivatePath =
+    matchedItem !== null ||
+    url.pathname === '/api/pairings' ||
+    url.pathname === '/api/shopping-cycle/active' ||
+    url.pathname === '/api/shopping-cycle/complete' ||
+    url.pathname === '/api/shopping-cycle/clear' ||
+    url.pathname === '/api/items' ||
+    url.pathname === '/api/supermarkets' ||
+    url.pathname === '/api/offers' ||
+    url.pathname === '/api/product-preferences/suggestions';
+  if (!knownPrivatePath) throw notFound('La ruta solicitada no existe.');
 
   const device = await auth.authorize(request);
 
@@ -71,7 +86,6 @@ export const routeApi = async (
     return jsonResponse({ item }, 201);
   }
 
-  const matchedItem = itemMatch(url.pathname);
   if (matchedItem) {
     if (matchedItem.toggle) {
       if (request.method !== 'POST') return methodNotAllowed(['POST']);
@@ -99,6 +113,11 @@ export const routeApi = async (
   if (url.pathname === '/api/supermarkets') {
     if (request.method !== 'GET') return methodNotAllowed(['GET']);
     return jsonResponse({ supermarkets: await shopping.getSupermarkets() });
+  }
+
+  if (url.pathname === '/api/offers') {
+    if (request.method !== 'GET') return methodNotAllowed(['GET']);
+    return jsonResponse(await offers.list(device, url));
   }
 
   if (url.pathname === '/api/product-preferences/suggestions') {

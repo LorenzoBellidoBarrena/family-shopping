@@ -1,12 +1,27 @@
-import { badRequest } from './errors';
+import { ApiError, badRequest } from './errors';
 import { UNITS, type ClearAction, type ItemValues, type Unit } from './domain/types';
+import { isProductCategory, type ProductCategory } from '../src/shared/product-category';
 
 export type JsonObject = Record<string, unknown>;
+const MAXIMUM_JSON_BYTES = 16 * 1024;
 
 export const readJsonObject = async (request: Request): Promise<JsonObject> => {
+  const declaredLength = Number(request.headers.get('content-length') ?? '0');
+  if (Number.isFinite(declaredLength) && declaredLength > MAXIMUM_JSON_BYTES) {
+    throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'El cuerpo de la petición es demasiado grande.');
+  }
+  let text: string;
+  try {
+    text = await request.text();
+  } catch {
+    throw badRequest('INVALID_BODY', 'No se pudo leer el cuerpo de la petición.');
+  }
+  if (new TextEncoder().encode(text).byteLength > MAXIMUM_JSON_BYTES) {
+    throw new ApiError(413, 'PAYLOAD_TOO_LARGE', 'El cuerpo de la petición es demasiado grande.');
+  }
   let value: unknown;
   try {
-    value = await request.json();
+    value = JSON.parse(text) as unknown;
   } catch {
     throw badRequest('INVALID_JSON', 'El cuerpo debe ser JSON válido.');
   }
@@ -88,7 +103,15 @@ const parseSupermarketId = (value: unknown): string | null => {
   return value;
 };
 
-export const parseItemValues = (body: JsonObject): ItemValues => {
+export const parseProductCategory = (value: unknown): ProductCategory | undefined => {
+  if (value === undefined) return undefined;
+  if (!isProductCategory(value)) {
+    throw badRequest('INVALID_CATEGORY', 'category no es una categoría de producto válida.');
+  }
+  return value;
+};
+
+export const parseItemValues = (body: JsonObject, category: ProductCategory): ItemValues => {
   const name = requiredName(body['name']);
   return {
     name,
@@ -96,6 +119,7 @@ export const parseItemValues = (body: JsonObject): ItemValues => {
     quantityMilli: parseQuantityMilli(body['quantity']),
     unit: parseUnit(body['unit']),
     supermarketId: parseSupermarketId(body['supermarketId']),
+    category,
   };
 };
 
@@ -111,6 +135,7 @@ export const parseItemPatch = (body: JsonObject, current: ItemValues): ItemValue
       body['supermarketId'] === undefined
         ? current.supermarketId
         : parseSupermarketId(body['supermarketId']),
+    category: parseProductCategory(body['category']) ?? current.category,
   };
 };
 

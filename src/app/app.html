@@ -16,60 +16,107 @@
       </section>
     } @else if (!store.hasToken()) {
       <section class="setup-card" aria-labelledby="setup-title">
-        @if (store.error()) {
+        @if (store.error() && store.errorCode() !== 'HOUSEHOLD_ALREADY_INITIALIZED') {
           <div class="error-banner" role="alert">
             <span>{{ store.error() }}</span>
             <button type="button" (click)="store.clearError()" aria-label="Cerrar aviso">×</button>
           </div>
         }
-        @if (incomingPairingCode()) {
-          <p class="status-pill">Invitación familiar</p>
-          <h2 id="setup-title">Vincular este móvil</h2>
-          <p class="supporting-text">
-            Confirma el código que aparece en el otro móvil para compartir la misma lista.
-          </p>
-          <div class="pairing-code pairing-code--compact" aria-label="Código de vinculación">
-            {{ incomingPairingCode() }}
+        @if (onboardingMode() === 'choice') {
+          <p class="status-pill">Bienvenido</p>
+          <h2 id="setup-title">Acceder a la lista familiar</h2>
+          <div class="onboarding-options">
+            <div>
+              <strong>¿Es el primer móvil?</strong>
+              <p>Crea el hogar utilizando la clave familiar de configuración.</p>
+              <button class="secondary-button" type="button" (click)="chooseBootstrap()">
+                Configurar hogar
+              </button>
+            </div>
+            <div>
+              <strong>¿Ya existe la lista familiar?</strong>
+              <p>Usa el código temporal generado desde un móvil autorizado.</p>
+              <button class="primary-button" type="button" (click)="choosePairing()">
+                Vincular este móvil
+              </button>
+            </div>
           </div>
+        } @else if (onboardingMode() === 'pair') {
+          <p class="status-pill">Invitación familiar</p>
+          <h2 id="setup-title">Vincular este dispositivo</h2>
+          <p class="supporting-text">
+            Estás vinculando este móvil a la lista familiar. El código se usa una sola vez.
+          </p>
           <form (ngSubmit)="consumePairing()">
+            <label for="pairing-code-input">Código de vinculación</label>
+            <input
+              id="pairing-code-input"
+              name="pairingCode"
+              autocomplete="one-time-code"
+              autocapitalize="characters"
+              maxlength="12"
+              required
+              [ngModel]="incomingPairingCode()"
+              (ngModelChange)="incomingPairingCode.set($event)"
+            />
             <label for="pairing-device-name">Nombre de este móvil <span>(opcional)</span></label>
             <input
               id="pairing-device-name"
               name="pairingDeviceName"
               [(ngModel)]="pairingDeviceName"
             />
-            <button class="primary-button" type="submit" [disabled]="store.busy()">
-              {{ store.busy() ? 'Vinculando…' : 'Vincular móvil' }}
+            <button
+              class="primary-button"
+              type="submit"
+              [disabled]="store.busy() || !incomingPairingCode().trim()"
+            >
+              {{ store.busy() ? 'Vinculando…' : 'Vincular dispositivo' }}
+            </button>
+            <button class="back-button" type="button" (click)="returnToOnboarding()">
+              ← Volver
             </button>
           </form>
         } @else {
           <p class="status-pill">Primer acceso</p>
-          <h2 id="setup-title">Preparar este móvil</h2>
-          <p class="supporting-text">
-            Introduce la clave familiar una sola vez. Después este móvil quedará vinculado.
-          </p>
-          <form (ngSubmit)="submitSetup()">
-            <label for="access-key">Clave familiar</label>
-            <input
-              id="access-key"
-              name="accessKey"
-              type="password"
-              autocomplete="current-password"
-              required
-              [(ngModel)]="setupAccessKey"
-            />
-            <label for="household-name">Nombre del hogar <span>(opcional)</span></label>
-            <input id="household-name" name="householdName" [(ngModel)]="householdName" />
-            <label for="device-name">Nombre de este móvil <span>(opcional)</span></label>
-            <input id="device-name" name="deviceName" [(ngModel)]="deviceName" />
-            <button
-              class="primary-button"
-              type="submit"
-              [disabled]="store.busy() || !setupAccessKey"
-            >
-              {{ store.busy() ? 'Preparando…' : 'Empezar' }}
+          @if (store.errorCode() === 'HOUSEHOLD_ALREADY_INITIALIZED') {
+            <h2 id="setup-title">Esta lista familiar ya está configurada</h2>
+            <p class="supporting-text">
+              Si quieres utilizar este dispositivo, vincúlalo desde un móvil ya autorizado.
+            </p>
+            <button class="primary-button" type="button" (click)="choosePairing()">
+              Vincular este móvil
             </button>
-          </form>
+          } @else {
+            <h2 id="setup-title">Configurar lista familiar</h2>
+            <p class="supporting-text">
+              La clave familiar sólo crea el hogar y se utiliza una vez, en el primer móvil.
+            </p>
+            <form (ngSubmit)="submitSetup()">
+              <label for="access-key">Clave familiar</label>
+              <input
+                id="access-key"
+                name="accessKey"
+                type="password"
+                autocomplete="current-password"
+                required
+                [(ngModel)]="setupAccessKey"
+              />
+              <label for="household-name">Nombre del hogar <span>(opcional)</span></label>
+              <input id="household-name" name="householdName" [(ngModel)]="householdName" />
+              <label for="device-name">Nombre de este móvil <span>(opcional)</span></label>
+              <input id="device-name" name="deviceName" [(ngModel)]="deviceName" />
+              <button
+                class="primary-button"
+                type="submit"
+                [disabled]="store.busy() || !setupAccessKey"
+              >
+                {{ store.busy() ? 'Creando…' : 'Crear hogar' }}
+              </button>
+              <button class="back-button" type="button" (click)="returnToOnboarding()">
+                ← Volver
+              </button>
+            </form>
+          }
         }
       </section>
     } @else if (view() === 'settings') {
@@ -96,6 +143,81 @@
           Añadir otro móvil
         </button>
         <p class="supporting-text">Se mostrará un QR y un código temporal para el nuevo móvil.</p>
+      </section>
+    } @else if (view() === 'offers') {
+      <section class="offers-view" aria-labelledby="offers-title">
+        <div class="offers-heading">
+          <div>
+            <p class="eyebrow">Datos de demostración</p>
+            <h2 id="offers-title">Ofertas</h2>
+          </div>
+          <span>Zafra</span>
+        </div>
+        <p class="supporting-text">
+          Esta primera versión usa fixtures para validar la experiencia. Los precios no son datos
+          comerciales reales.
+        </p>
+        <div class="offer-filters" aria-label="Filtrar ofertas por supermercado">
+          @for (filter of offerFilters; track filter.id) {
+            <button
+              type="button"
+              [class.offer-filter--active]="offerFilter() === filter.id"
+              [attr.aria-pressed]="offerFilter() === filter.id"
+              (click)="selectOfferFilter(filter.id)"
+            >
+              {{ filter.name }}
+            </button>
+          }
+        </div>
+
+        @if (store.offline()) {
+          <div class="empty-state">
+            <span aria-hidden="true">⌁</span>
+            <h3>Ofertas no disponibles sin conexión</h3>
+            <p>La lista familiar sigue funcionando con normalidad.</p>
+          </div>
+        } @else if (store.offersLoading()) {
+          <div class="empty-state" aria-live="polite">
+            <span class="spinner" aria-hidden="true"></span>
+            <h3>Cargando ofertas…</h3>
+          </div>
+        } @else if (store.offers().length === 0) {
+          <div class="empty-state">
+            <span aria-hidden="true">％</span>
+            <h3>No hay ofertas para este filtro</h3>
+          </div>
+        } @else {
+          @if (store.offersPartial()) {
+            <div class="connection-banner" role="status">
+              Un proveedor no respondió; se muestran los demás resultados.
+            </div>
+          }
+          <div class="offer-list">
+            @for (offer of store.offers(); track offer.id) {
+              <article class="offer-card" [class.offer-card--related]="offer.relatedToList">
+                <div class="offer-card-heading">
+                  <span>{{ offer.supermarketName }}</span>
+                  @if (offer.relatedToList) {
+                    <strong>Está en tu lista</strong>
+                  }
+                </div>
+                <h3>{{ offer.productName }}</h3>
+                <p>{{ offer.brand }} · {{ offer.packageLabel }}</p>
+                <div class="offer-price">
+                  <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
+                  @if (offer.normalPriceCents !== null) {
+                    <span>{{ formatPrice(offer.normalPriceCents) }}</span>
+                  }
+                </div>
+                <p class="offer-promotion">{{ offer.promotionType }}</p>
+                @if (offer.requiresLoyaltyCard) {
+                  <p class="loyalty-note">Requiere tarjeta de fidelización</p>
+                }
+                <p class="catalog-note">Producto publicado · disponibilidad no confirmada</p>
+              </article>
+            }
+          </div>
+        }
       </section>
     } @else {
       @if (store.error()) {
@@ -154,7 +276,10 @@
             <div class="suggestions" aria-label="Sugerencias">
               @for (suggestion of store.suggestions(); track suggestion.id) {
                 <button type="button" (click)="applySuggestion(suggestion)">
-                  <strong>{{ suggestion.name }}</strong>
+                  <strong>
+                    <span aria-hidden="true">{{ categoryDetails(suggestion.category).emoji }}</span>
+                    {{ suggestion.name }}
+                  </strong>
                   <span>
                     {{ suggestion.quantity }}
                     {{ formatUnit(suggestion.quantity, suggestion.unit) }} ·
@@ -221,7 +346,8 @@
                 [disabled]="store.busy() || store.offline()"
                 (click)="addHabit(habit)"
               >
-                <span aria-hidden="true">＋</span> {{ habit.name }}
+                <span aria-hidden="true">{{ categoryDetails(habit.category).emoji }}</span>
+                {{ habit.name }}
               </button>
             }
           </div>
@@ -261,24 +387,30 @@
             @for (item of store.items(); track item.id) {
               <li [class.checked]="item.checked" [attr.data-item-id]="item.id">
                 <button
-                  class="check-button"
+                  class="item-toggle"
                   type="button"
                   [disabled]="store.busy()"
                   [attr.aria-label]="
-                    item.checked ? 'Desmarcar ' + item.name : 'Marcar ' + item.name
+                    item.name +
+                    ', ' +
+                    (item.checked
+                      ? 'comprado. Desmarcar producto'
+                      : 'pendiente. Marcar como comprado')
                   "
                   [attr.aria-pressed]="item.checked"
                   (click)="toggleItem(item)"
                 >
-                  <span aria-hidden="true">{{ item.checked ? '✓' : '' }}</span>
-                </button>
-                <div class="item-copy">
-                  <strong>{{ item.name }}</strong>
-                  <span>
-                    {{ item.quantity }} {{ formatUnit(item.quantity, item.unit) }} ·
-                    {{ store.supermarketName(item.supermarketId) }}
+                  <span class="category-emoji" aria-hidden="true">
+                    {{ categoryDetails(item.category).emoji }}
                   </span>
-                </div>
+                  <span class="item-copy">
+                    <strong>{{ item.name }}</strong>
+                    <span>
+                      {{ item.quantity }} {{ formatUnit(item.quantity, item.unit) }} ·
+                      {{ store.supermarketName(item.supermarketId) }}
+                    </span>
+                  </span>
+                </button>
                 <button
                   class="edit-button"
                   type="button"
@@ -305,7 +437,12 @@
       >
         <span aria-hidden="true">☷</span> Lista
       </button>
-      <button type="button" class="nav-item" disabled title="Próximamente">
+      <button
+        type="button"
+        class="nav-item"
+        [class.nav-item--active]="view() === 'offers'"
+        (click)="showOffers()"
+      >
         <span aria-hidden="true">％</span> Ofertas
       </button>
       <button
@@ -335,6 +472,7 @@
           <img class="pairing-qr" [src]="qr" alt="Código QR para vincular otro móvil" />
         }
         <div class="pairing-code" aria-label="Código de vinculación">{{ pairing.code }}</div>
+        <a class="pairing-link" [href]="pairing.pairingUrl">Abrir enlace de vinculación</a>
         <p class="pairing-countdown" aria-live="polite">
           Caduca en {{ pairingSeconds() }} segundos
         </p>
@@ -392,6 +530,14 @@
               <option value="">Sin supermercado</option>
               @for (supermarket of store.supermarkets(); track supermarket.id) {
                 <option [value]="supermarket.id">{{ supermarket.name }}</option>
+              }
+            </select>
+          </label>
+          <label class="full-width">
+            Categoría
+            <select name="editCategory" [(ngModel)]="editCategory">
+              @for (category of productCategories; track category.code) {
+                <option [value]="category.code">{{ category.emoji }} {{ category.label }}</option>
               }
             </select>
           </label>

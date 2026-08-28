@@ -1,33 +1,62 @@
 import { DOCUMENT } from '@angular/common';
 import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+import { SwUpdate } from '@angular/service-worker';
 import QRCode from 'qrcode';
-import type { PairingDetails, ProductPreference, ShoppingItem, Unit } from './core/api.models';
+import type {
+  OfferSupermarketId,
+  PairingDetails,
+  ProductPreference,
+  ProductCategory,
+  ShoppingItem,
+  Unit,
+} from './core/api.models';
 import { UNITS } from './core/api.models';
+import { PRODUCT_CATEGORIES, productCategoryDefinition } from '../shared/product-category';
 import { ShoppingStore } from './state/shopping.store';
 
 @Component({
   imports: [FormsModule],
   selector: 'app-root',
-  styleUrl: './app.scss',
   templateUrl: './app.html',
 })
 export class App implements OnInit {
   protected readonly store = inject(ShoppingStore);
   private readonly document = inject(DOCUMENT);
+  private readonly router = inject(Router);
+  private readonly swUpdate = inject(SwUpdate, { optional: true });
+  private readonly destroyRef = inject(DestroyRef);
   private pairingTimer: number | null = null;
   protected readonly units = UNITS;
-  protected readonly view = signal<'list' | 'settings'>('list');
+  protected readonly productCategories = PRODUCT_CATEGORIES;
+  protected readonly categoryDetails = productCategoryDefinition;
+  protected readonly view = signal<'list' | 'offers' | 'settings'>('list');
+  protected readonly offerFilter = signal<'all' | OfferSupermarketId>('all');
+  protected readonly offerFilters: readonly {
+    id: 'all' | OfferSupermarketId;
+    name: string;
+  }[] = [
+    { id: 'all', name: 'Todas' },
+    { id: 'lidl', name: 'Lidl' },
+    { id: 'mercadona', name: 'Mercadona' },
+    { id: 'carrefour', name: 'Carrefour' },
+    { id: 'dia', name: 'DIA' },
+  ];
   protected readonly editingItem = signal<ShoppingItem | null>(null);
   protected readonly deletingItem = signal<ShoppingItem | null>(null);
   protected readonly clearDialogOpen = signal(false);
   protected readonly pairingDetails = signal<PairingDetails | null>(null);
   protected readonly pairingQr = signal<string | null>(null);
   protected readonly pairingSeconds = signal(0);
+  private readonly initialUrl = new URL(
+    this.document.defaultView?.location.href ?? 'https://app.invalid/',
+  );
   protected readonly incomingPairingCode = signal(
-    new URL(this.document.defaultView?.location.href ?? 'https://app.invalid/').searchParams.get(
-      'code',
-    ) ?? '',
+    this.initialUrl.searchParams.get('code') ?? this.initialUrl.searchParams.get('token') ?? '',
+  );
+  protected readonly onboardingMode = signal<'choice' | 'bootstrap' | 'pair'>(
+    this.initialUrl.pathname === '/pair' || this.incomingPairingCode() ? 'pair' : 'choice',
   );
   private readonly dismissedCompletionCycle = signal<string | null>(null);
   protected readonly completionDialogOpen = computed(() => {
@@ -45,14 +74,17 @@ export class App implements OnInit {
   protected quickQuantity = '1';
   protected quickUnit: Unit = 'unidad';
   protected quickSupermarketId = '';
+  protected quickCategory: ProductCategory | null = null;
   protected quickDetailsOpen = false;
   protected editName = '';
   protected editQuantity = '1';
   protected editUnit: Unit = 'unidad';
   protected editSupermarketId = '';
+  protected editCategory: ProductCategory = 'OTHER';
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.stopPairingTimer());
+    this.destroyRef.onDestroy(() => this.stopPairingTimer());
+    this.enableAutomaticAppUpdates();
   }
 
   async ngOnInit(): Promise<void> {
@@ -65,7 +97,10 @@ export class App implements OnInit {
       householdName: this.householdName.trim() || undefined,
       deviceName: this.deviceName.trim() || undefined,
     });
-    if (success) this.setupAccessKey = '';
+    if (success) {
+      this.setupAccessKey = '';
+      this.navigateHome();
+    }
   }
 
   protected async consumePairing(): Promise<void> {
@@ -75,9 +110,25 @@ export class App implements OnInit {
     );
     if (success) {
       this.incomingPairingCode.set('');
-      this.document.defaultView?.history.replaceState({}, '', '/');
+      this.navigateHome();
       this.view.set('list');
     }
+  }
+
+  protected choosePairing(): void {
+    this.store.clearError();
+    this.incomingPairingCode.set('');
+    this.onboardingMode.set('pair');
+  }
+
+  protected chooseBootstrap(): void {
+    this.store.clearError();
+    this.onboardingMode.set('bootstrap');
+  }
+
+  protected returnToOnboarding(): void {
+    this.store.clearError();
+    this.onboardingMode.set('choice');
   }
 
   protected async createPairing(): Promise<void> {
@@ -104,6 +155,7 @@ export class App implements OnInit {
   }
 
   protected onQuickNameChange(): void {
+    this.quickCategory = null;
     void this.store.searchSuggestions(this.quickName);
   }
 
@@ -112,6 +164,7 @@ export class App implements OnInit {
     this.quickQuantity = preference.quantity;
     this.quickUnit = preference.unit;
     this.quickSupermarketId = preference.supermarketId ?? '';
+    this.quickCategory = preference.category;
     this.quickDetailsOpen = true;
     this.store.clearSuggestions();
   }
@@ -119,6 +172,7 @@ export class App implements OnInit {
   protected async addQuickItem(): Promise<void> {
     const name = this.quickName.trim();
     if (!name) return;
+    const category = this.quickCategory ?? undefined;
     const success = await this.store.addItem(
       this.quickDetailsOpen
         ? {
@@ -126,8 +180,9 @@ export class App implements OnInit {
             quantity: this.quickQuantity,
             unit: this.quickUnit,
             supermarketId: this.quickSupermarketId || null,
+            category,
           }
-        : { name },
+        : { name, category },
     );
     if (success) this.resetQuickForm();
   }
@@ -138,6 +193,7 @@ export class App implements OnInit {
       quantity: preference.quantity,
       unit: preference.unit,
       supermarketId: preference.supermarketId,
+      category: preference.category,
     });
   }
 
@@ -151,6 +207,7 @@ export class App implements OnInit {
     this.editQuantity = item.quantity;
     this.editUnit = item.unit;
     this.editSupermarketId = item.supermarketId ?? '';
+    this.editCategory = item.category;
     this.editingItem.set(item);
   }
 
@@ -162,6 +219,7 @@ export class App implements OnInit {
       quantity: this.editQuantity,
       unit: this.editUnit,
       supermarketId: this.editSupermarketId || null,
+      category: this.editCategory,
     });
     if (success) this.editingItem.set(null);
   }
@@ -193,6 +251,23 @@ export class App implements OnInit {
     }
   }
 
+  protected showOffers(): void {
+    this.view.set('offers');
+    const filter = this.offerFilter();
+    void this.store.loadOffers(filter === 'all' ? undefined : filter);
+  }
+
+  protected selectOfferFilter(filter: 'all' | OfferSupermarketId): void {
+    this.offerFilter.set(filter);
+    void this.store.loadOffers(filter === 'all' ? undefined : filter);
+  }
+
+  protected formatPrice(cents: number): string {
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(
+      cents / 100,
+    );
+  }
+
   protected formatUnit(quantity: string, unit: Unit): string {
     if (quantity === '1') return unit;
     const plurals: Partial<Record<Unit, string>> = {
@@ -209,8 +284,29 @@ export class App implements OnInit {
     this.quickQuantity = '1';
     this.quickUnit = 'unidad';
     this.quickSupermarketId = '';
+    this.quickCategory = null;
     this.quickDetailsOpen = false;
     this.store.clearSuggestions();
+  }
+
+  private navigateHome(): void {
+    void this.router.navigateByUrl('/');
+    this.document.defaultView?.history.replaceState({}, '', '/');
+  }
+
+  private enableAutomaticAppUpdates(): void {
+    if (!this.swUpdate?.isEnabled) return;
+
+    const updates = this.swUpdate.versionUpdates.subscribe((event) => {
+      if (event.type !== 'VERSION_READY') return;
+
+      void this.swUpdate
+        ?.activateUpdate()
+        .then(() => this.document.defaultView?.location.reload())
+        .catch(() => undefined);
+    });
+    this.destroyRef.onDestroy(() => updates.unsubscribe());
+    void this.swUpdate.checkForUpdate().catch(() => undefined);
   }
 
   private updatePairingSeconds(): void {

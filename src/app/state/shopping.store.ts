@@ -2,7 +2,9 @@ import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import type {
   BootstrapInput,
   ClearAction,
+  CatalogOffer,
   ItemInput,
+  OfferSupermarketId,
   PairingDetails,
   ProductPreference,
   ShoppingCycle,
@@ -30,22 +32,30 @@ export class ShoppingStore {
   private readonly availableSupermarkets = signal<Supermarket[]>([]);
   private readonly habitualProducts = signal<ProductPreference[]>([]);
   private readonly currentSuggestions = signal<ProductPreference[]>([]);
+  private readonly currentOffers = signal<CatalogOffer[]>([]);
+  private readonly offersLoadingState = signal(false);
+  private readonly offersPartialState = signal(false);
   private readonly loadingState = signal(true);
   private readonly busyState = signal(false);
   private readonly syncingState = signal(false);
   private readonly cachedState = signal(false);
   private readonly pendingOperationCount = signal(0);
   private readonly errorState = signal<string | null>(null);
+  private readonly errorCodeState = signal<string | null>(null);
 
   readonly cycle = this.currentCycle.asReadonly();
   readonly supermarkets = this.availableSupermarkets.asReadonly();
   readonly habits = this.habitualProducts.asReadonly();
   readonly suggestions = this.currentSuggestions.asReadonly();
+  readonly offers = this.currentOffers.asReadonly();
+  readonly offersLoading = this.offersLoadingState.asReadonly();
+  readonly offersPartial = this.offersPartialState.asReadonly();
   readonly loading = this.loadingState.asReadonly();
   readonly busy = this.busyState.asReadonly();
   readonly syncing = this.syncingState.asReadonly();
   readonly pendingOperations = this.pendingOperationCount.asReadonly();
   readonly error = this.errorState.asReadonly();
+  readonly errorCode = this.errorCodeState.asReadonly();
   readonly hasToken = this.tokens.hasToken;
   readonly realtimeStatus = this.realtime.status;
   readonly offline = computed(() => !this.network.online() || this.cachedState());
@@ -69,6 +79,7 @@ export class ShoppingStore {
     }
     this.loadingState.set(true);
     this.errorState.set(null);
+    this.errorCodeState.set(null);
     const cached = await this.cache.loadCycle();
     if (cached) {
       this.currentCycle.set(cached);
@@ -110,12 +121,14 @@ export class ShoppingStore {
 
   async createPairing(): Promise<PairingDetails | null> {
     if (this.offline()) {
+      this.errorCodeState.set('NETWORK_UNAVAILABLE');
       this.errorState.set('Conéctate a internet para añadir otro móvil.');
       return null;
     }
     if (this.busyState()) return null;
     this.busyState.set(true);
     this.errorState.set(null);
+    this.errorCodeState.set(null);
     try {
       return await this.api.createPairing();
     } catch (error) {
@@ -123,6 +136,22 @@ export class ShoppingStore {
       return null;
     } finally {
       this.busyState.set(false);
+    }
+  }
+
+  async loadOffers(supermarket?: OfferSupermarketId): Promise<void> {
+    if (this.offline() || this.offersLoadingState()) return;
+    this.offersLoadingState.set(true);
+    this.errorState.set(null);
+    this.errorCodeState.set(null);
+    try {
+      const result = await this.api.getOffers(supermarket);
+      this.currentOffers.set(result.offers);
+      this.offersPartialState.set(result.partial);
+    } catch (error) {
+      this.handleError(error);
+    } finally {
+      this.offersLoadingState.set(false);
     }
   }
 
@@ -147,6 +176,7 @@ export class ShoppingStore {
     if (this.offline()) return this.toggleOffline(itemId);
     this.busyState.set(true);
     this.errorState.set(null);
+    this.errorCodeState.set(null);
     try {
       const updated = await this.api.toggleItem(itemId);
       this.updateItems((items) => items.map((item) => (item.id === itemId ? updated : item)));
@@ -242,6 +272,7 @@ export class ShoppingStore {
 
   clearError(): void {
     this.errorState.set(null);
+    this.errorCodeState.set(null);
   }
 
   forgetDevice(): void {
@@ -252,6 +283,7 @@ export class ShoppingStore {
     this.habitualProducts.set([]);
     this.currentSuggestions.set([]);
     this.errorState.set(null);
+    this.errorCodeState.set(null);
     this.started = false;
     void this.cache.clear();
   }
@@ -320,11 +352,13 @@ export class ShoppingStore {
   private async runOnline(operation: () => Promise<void>): Promise<boolean> {
     if (this.busyState()) return false;
     if (this.offline()) {
+      this.errorCodeState.set('NETWORK_UNAVAILABLE');
       this.errorState.set('Sin conexión sólo se pueden marcar o desmarcar productos.');
       return false;
     }
     this.busyState.set(true);
     this.errorState.set(null);
+    this.errorCodeState.set(null);
     try {
       await operation();
       await this.persistCycle();
@@ -352,6 +386,7 @@ export class ShoppingStore {
 
   private handleError(error: unknown): void {
     if (error instanceof ShoppingApiError && error.status === 401) {
+      this.errorCodeState.set(error.code);
       this.realtime.disconnect();
       this.tokens.clear();
       this.currentCycle.set(null);
@@ -359,10 +394,12 @@ export class ShoppingStore {
       return;
     }
     if (this.isNetworkFailure(error)) {
+      this.errorCodeState.set('NETWORK_UNAVAILABLE');
       this.cachedState.set(true);
       this.errorState.set('Sin conexión. Puedes seguir consultando y marcando la lista guardada.');
       return;
     }
+    this.errorCodeState.set(error instanceof ShoppingApiError ? error.code : 'REQUEST_FAILED');
     this.errorState.set(
       error instanceof Error
         ? error.message

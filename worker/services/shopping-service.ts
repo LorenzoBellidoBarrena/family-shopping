@@ -1,12 +1,15 @@
 import type { Device } from '../domain/types';
 import { badRequest } from '../errors';
 import { D1Repository } from '../repositories/d1-repository';
+import { classifyNormalizedProductName } from '../../src/shared/product-category';
 import {
   normalizeProductName,
   parseClearAction,
   parseItemPatch,
   parseItemValues,
+  parseProductCategory,
   parseQuantityMilli,
+  requiredName,
   type JsonObject,
 } from '../validation';
 
@@ -22,7 +25,15 @@ export class ShoppingService {
   }
 
   async addItem(device: Device, body: JsonObject) {
-    const values = parseItemValues(body);
+    const normalizedName = normalizeProductName(requiredName(body['name']));
+    const requestedCategory = parseProductCategory(body['category']);
+    const learnedCategory = await this.repository.getPreferenceCategory(
+      device.householdId,
+      normalizedName,
+    );
+    const category =
+      requestedCategory ?? learnedCategory ?? classifyNormalizedProductName(normalizedName);
+    const values = parseItemValues(body, category);
     await this.validateSupermarket(values.supermarketId);
     return this.repository.addItem(
       device.householdId,
@@ -41,6 +52,7 @@ export class ShoppingService {
       quantityMilli: parseQuantityMilli(current.quantity),
       unit: current.unit,
       supermarketId: current.supermarketId,
+      category: current.category,
     });
     await this.validateSupermarket(values.supermarketId);
     return this.repository.updateItem(

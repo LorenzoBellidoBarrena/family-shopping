@@ -19,6 +19,12 @@ IndexedDB `family-shopping-cache` contiene:
 Sin red se puede consultar la lista y marcar o desmarcar productos. Altas, ediciones, eliminaciones,
 pairing y cierres se bloquean porque requieren validación inmediata del servidor.
 
+La categoría forma parte del item almacenado dentro del ciclo, así que el mismo emoji permanece al
+perder la conexión y durante toggles offline. Las copias creadas antes de `ProductCategory` se leen
+como `OTHER`; no hace falta cambiar la versión de IndexedDB porque no se modificó la estructura de
+los object stores. La creación offline continúa deliberadamente fuera del alcance actual: el único
+tipo de operación en cola sigue siendo marcar/desmarcar.
+
 ## Reconciliación determinista
 
 Al volver la red, el cliente lee primero el ciclo activo de D1. Para cada operación pendiente, en

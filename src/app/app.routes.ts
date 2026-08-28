@@ -1,3 +1,9 @@
-import { Routes } from '@angular/router';
+import type { Routes } from '@angular/router';
 
-export const routes: Routes = [];
+// The root shell owns authentication and onboarding. These componentless routes make `/pair`
+// addressable before a device token exists without putting it behind an auth redirect.
+export const routes: Routes = [
+  { path: '', pathMatch: 'full', children: [] },
+  { path: 'pair', children: [] },
+  { path: '**', redirectTo: '' },
+];

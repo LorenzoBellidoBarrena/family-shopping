@@ -32,6 +32,7 @@ interface CycleResponse {
 interface PairingResponse {
   code: string;
   expiresAt: string;
+  pairingUrl: string;
 }
 
 const testEnv = env as unknown as TestEnv;
@@ -68,10 +69,10 @@ const connectWebSocket = async (token: string): Promise<Response> => {
 const readJson = async <T>(response: Response): Promise<T> => (await response.json()) as T;
 
 const bootstrap = async (): Promise<BootstrapResponse> => {
-  const response = await api('/api/bootstrap/household', {
+  const response = await api('/api/bootstrap', {
     method: 'POST',
     body: {
-      accessKey: 'integration-test-access-key',
+      accessKey: testEnv.HOUSEHOLD_ACCESS_KEY,
       householdName: 'Casa',
       deviceName: 'Móvil principal',
     },
@@ -129,9 +130,9 @@ describe('household bootstrap and authorization', () => {
 
   it('rejects a second bootstrap after initialization', async () => {
     await bootstrap();
-    const response = await api('/api/bootstrap/household', {
+    const response = await api('/api/bootstrap', {
       method: 'POST',
-      body: { accessKey: 'integration-test-access-key' },
+      body: { accessKey: testEnv.HOUSEHOLD_ACCESS_KEY },
     });
 
     expect(response.status).toBe(409);
@@ -163,6 +164,43 @@ describe('household bootstrap and authorization', () => {
   });
 });
 
+describe('production hardening', () => {
+  it('returns a JSON 404 for an unknown API route before authentication', async () => {
+    const response = await api('/api/unknown');
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(await readJson<{ error: { code: string } }>(response)).toMatchObject({
+      error: { code: 'NOT_FOUND' },
+    });
+  });
+
+  it('adds restrictive security and cache headers to HTTP responses', async () => {
+    const response = await api('/api/health');
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('content-security-policy')).toContain("script-src 'self'");
+    expect(response.headers.get('content-security-policy')).not.toContain("'unsafe-inline'");
+    expect(response.headers.get('strict-transport-security')).toBe('max-age=31536000');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('x-frame-options')).toBe('DENY');
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+  });
+
+  it('rejects oversized JSON before bootstrap processing', async () => {
+    const response = await api('/api/bootstrap', {
+      method: 'POST',
+      body: { accessKey: 'x'.repeat(17 * 1024) },
+    });
+
+    expect(response.status).toBe(413);
+    expect(await readJson<{ error: { code: string } }>(response)).toMatchObject({
+      error: { code: 'PAYLOAD_TOO_LARGE' },
+    });
+  });
+});
+
 describe('shopping list domain', () => {
   it('adds a product with precise quantity and a stable sort order', async () => {
     const { token } = await bootstrap();
@@ -175,11 +213,35 @@ describe('shopping list domain', () => {
     expect(item).toMatchObject({
       name: 'Leche entera',
       normalizedName: 'leche entera',
+      category: 'DAIRY',
       quantity: '1.5',
       unit: 'litro',
       supermarketId: 'lidl',
       checked: false,
       sortOrder: 1000,
+    });
+  });
+
+  it('reuses the existing normalization before deterministic classification', async () => {
+    const { token } = await bootstrap();
+    const milk = await addItem(token, '  LÉCHE   ');
+    const unknown = await addItem(token, 'Producto desconocido');
+
+    expect(milk).toMatchObject({ normalizedName: 'leche', category: 'DAIRY' });
+    expect(unknown.category).toBe('OTHER');
+  });
+
+  it('rejects category codes outside the shared runtime contract', async () => {
+    const { token } = await bootstrap();
+    const response = await api('/api/items', {
+      method: 'POST',
+      token,
+      body: { name: 'Leche', category: 'FOOD' },
+    });
+
+    expect(response.status).toBe(400);
+    expect(await readJson<{ error: { code: string } }>(response)).toMatchObject({
+      error: { code: 'INVALID_CATEGORY' },
     });
   });
 
@@ -312,6 +374,7 @@ describe('shopping list domain', () => {
     expect(result.cycle.items).toHaveLength(1);
     expect(result.cycle.items[0]).toMatchObject({
       name: pending.name,
+      category: 'DAIRY',
       quantity: '6',
       unit: 'unidad',
       supermarketId: 'lidl',
@@ -359,16 +422,51 @@ describe('shopping list domain', () => {
 
     expect(result.suggestions[0]).toMatchObject({
       name: 'Leche',
+      category: 'DAIRY',
       useCount: 2,
       quantity: '2',
       unit: 'botella',
     });
   });
+
+  it('learns a manual category correction and prioritizes it on the next creation', async () => {
+    const { token } = await bootstrap();
+    const original = await addItem(token, 'Bebida de casa');
+    expect(original.category).toBe('OTHER');
+
+    const correction = await api(`/api/items/${original.id}`, {
+      method: 'PATCH',
+      token,
+      body: { category: 'DAIRY' },
+    });
+    expect((await readJson<ItemResponse>(correction)).item.category).toBe('DAIRY');
+
+    await api('/api/shopping-cycle/clear', {
+      method: 'POST',
+      token,
+      body: { action: 'CLEAR_ALL' },
+    });
+    const learned = await addItem(token, '  BEBIDA DE CASA ');
+    expect(learned).toMatchObject({ normalizedName: 'bebida de casa', category: 'DAIRY' });
+  });
 });
 
 describe('device pairing', () => {
+  it('requires an authorized device to create a pairing', async () => {
+    await bootstrap();
+    const missing = await api('/api/pairings', { method: 'POST' });
+    const invalid = await api('/api/pairings', {
+      method: 'POST',
+      token: 'invalid-token-long-enough-for-validation-123456789',
+    });
+
+    expect(missing.status).toBe(401);
+    expect(invalid.status).toBe(401);
+  });
+
   it('rejects an expired pairing code', async () => {
-    const { token } = await bootstrap();
+    const primary = await bootstrap();
+    const { token } = primary;
     const generated = await api('/api/pairings', { method: 'POST', token });
     const pairing = await readJson<PairingResponse>(generated);
     await testEnv.DB.prepare(`UPDATE pairing_codes SET expires_at = ?`)
@@ -383,16 +481,22 @@ describe('device pairing', () => {
   });
 
   it('allows pairing exactly once and stores only the new token hash', async () => {
-    const { token } = await bootstrap();
+    const primary = await bootstrap();
+    const { token } = primary;
     const generated = await api('/api/pairings', { method: 'POST', token });
     const pairing = await readJson<PairingResponse>(generated);
     expect(new Date(pairing.expiresAt).getTime() - Date.now()).toBeGreaterThan(9 * 60 * 1000);
+    expect(new URL(pairing.pairingUrl).pathname).toBe('/pair');
+    expect(new URL(pairing.pairingUrl).searchParams.get('code')).toBe(pairing.code);
 
     const first = await api('/api/pairings/consume', {
       method: 'POST',
       body: { code: pairing.code, deviceName: 'Segundo móvil' },
     });
-    const firstResult = await readJson<{ device: { id: string }; token: string }>(first);
+    const firstResult = await readJson<{
+      device: { id: string; householdId: string };
+      token: string;
+    }>(first);
     const second = await api('/api/pairings/consume', {
       method: 'POST',
       body: { code: pairing.code, deviceName: 'Tercer móvil' },
@@ -400,12 +504,68 @@ describe('device pairing', () => {
 
     expect(first.status).toBe(201);
     expect(firstResult.token).toMatch(/^[A-Za-z0-9_-]{40,100}$/u);
+    expect(firstResult.token).not.toBe(primary.token);
+    expect(firstResult.device.id).not.toBe(primary.device.id);
+    expect(firstResult.device.householdId).toBe(primary.household.id);
     expect(second.status).toBe(410);
-    const stored = await testEnv.DB.prepare(`SELECT token_hash FROM devices WHERE id = ?`)
-      .bind(firstResult.device.id)
-      .first<{ token_hash: string }>();
-    expect(stored?.token_hash).toHaveLength(64);
-    expect(stored?.token_hash).not.toBe(firstResult.token);
+    const stored = await testEnv.DB.prepare(
+      `SELECT id, household_id, token_hash FROM devices ORDER BY created_at, id`,
+    ).all<{ id: string; household_id: string; token_hash: string }>();
+    expect(stored.results).toHaveLength(2);
+    expect(new Set(stored.results.map((device) => device.id)).size).toBe(2);
+    expect(stored.results.every((device) => device.household_id === primary.household.id)).toBe(
+      true,
+    );
+    expect(stored.results.every((device) => device.token_hash.length === 64)).toBe(true);
+    expect(stored.results.every((device) => device.token_hash !== primary.token)).toBe(true);
+    expect(stored.results.every((device) => device.token_hash !== firstResult.token)).toBe(true);
+  });
+});
+
+describe('supermarket offers module', () => {
+  it('requires authorization and validates the supermarket filter', async () => {
+    const { token } = await bootstrap();
+    const unauthorized = await api('/api/offers');
+    const invalid = await api('/api/offers?supermarket=unknown', { token });
+
+    expect(unauthorized.status).toBe(401);
+    expect(invalid.status).toBe(400);
+    expect(await readJson<{ error: { code: string } }>(invalid)).toMatchObject({
+      error: { code: 'INVALID_SUPERMARKET' },
+    });
+  });
+
+  it('isolates fixture providers, filters by chain, and relates offers to the active list', async () => {
+    const { token } = await bootstrap();
+    await addItem(token, 'Leche');
+    const all = await api('/api/offers', { token });
+    const result = await readJson<{
+      offers: {
+        supermarketId: string;
+        productName: string;
+        relatedToList: boolean;
+        matchedItemNames: string[];
+        catalogAvailability: string;
+        fixture: boolean;
+      }[];
+      partial: boolean;
+    }>(all);
+    const filtered = await api('/api/offers?supermarket=dia', { token });
+    const dia = await readJson<{ offers: { supermarketId: string }[] }>(filtered);
+
+    expect(all.status).toBe(200);
+    expect(result.partial).toBe(false);
+    expect(result.offers).toHaveLength(8);
+    expect(result.offers[0]).toMatchObject({
+      supermarketId: 'lidl',
+      productName: 'Leche entera 1 litro',
+      relatedToList: true,
+      matchedItemNames: ['Leche'],
+      catalogAvailability: 'PUBLISHED',
+      fixture: true,
+    });
+    expect(dia.offers).toHaveLength(2);
+    expect(dia.offers.every((offer) => offer.supermarketId === 'dia')).toBe(true);
   });
 });
 
@@ -442,7 +602,7 @@ describe('household realtime channel', () => {
       type: string;
       householdId: string;
       revision: number;
-      payload: { item: { id: string } };
+      payload: { item: { id: string; category: string } };
     };
 
     expect(event).toMatchObject({
@@ -450,8 +610,62 @@ describe('household realtime channel', () => {
       type: 'ITEM_CREATED',
       householdId: primary.household.id,
       revision: 1,
-      payload: { item: { id: created.id } },
+      payload: { item: { id: created.id, category: 'COFFEE_TEA' } },
     });
+
+    const secondaryRead = await api('/api/shopping-cycle/active', { token: secondary.token });
+    expect(secondaryRead.status).toBe(200);
+    expect((await readJson<CycleResponse>(secondaryRead)).cycle.items[0].id).toBe(created.id);
+
+    const updatedMessage = new Promise<MessageEvent>((resolve) =>
+      socket.addEventListener('message', resolve, { once: true }),
+    );
+    const update = await api(`/api/items/${created.id}`, {
+      method: 'PATCH',
+      token: primary.token,
+      body: { category: 'OTHER' },
+    });
+    expect(update.status).toBe(200);
+    const updatedEvent = JSON.parse(String((await updatedMessage).data)) as {
+      type: string;
+      payload: { item: ShoppingItem };
+    };
+    expect(updatedEvent).toMatchObject({
+      type: 'ITEM_UPDATED',
+      payload: { item: { id: created.id, category: 'OTHER' } },
+    });
+    const secondaryAfterUpdate = await api('/api/shopping-cycle/active', {
+      token: secondary.token,
+    });
+    expect((await readJson<CycleResponse>(secondaryAfterUpdate)).cycle.items[0].category).toBe(
+      'OTHER',
+    );
+
+    const primaryUpgrade = await connectWebSocket(primary.token);
+    expect(primaryUpgrade.status).toBe(101);
+    const primarySocket = primaryUpgrade.webSocket!;
+    primarySocket.accept();
+    const checkedMessage = new Promise<MessageEvent>((resolve) =>
+      primarySocket.addEventListener('message', resolve, { once: true }),
+    );
+    const second = await addItem(primary.token, 'Pan');
+    const toggled = await toggleItem(secondary.token, created.id);
+    const checkedEvent = JSON.parse(String((await checkedMessage).data)) as {
+      type: string;
+      payload: { item: ShoppingItem };
+    };
+    const canonical = await api('/api/shopping-cycle/active', { token: primary.token });
+
+    expect(toggled.checked).toBe(true);
+    expect(checkedEvent).toMatchObject({
+      type: 'ITEM_CHECKED',
+      payload: { item: { id: created.id, checked: true, sortOrder: created.sortOrder } },
+    });
+    expect((await readJson<CycleResponse>(canonical)).cycle.items.map((item) => item.id)).toEqual([
+      created.id,
+      second.id,
+    ]);
     socket.close(1000, 'test complete');
+    primarySocket.close(1000, 'test complete');
   });
 });

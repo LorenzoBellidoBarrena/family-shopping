@@ -7,6 +7,8 @@ import type {
   BootstrapResponse,
   ClearAction,
   ItemInput,
+  OfferSupermarketId,
+  OffersResponse,
   PairingConsumeInput,
   PairingConsumeResponse,
   PairingDetails,
@@ -34,9 +36,7 @@ export class ShoppingApiService {
   private readonly tokens = inject(DeviceTokenStore);
 
   bootstrap(input: BootstrapInput): Promise<BootstrapResponse> {
-    return this.request(
-      firstValueFrom(this.http.post<BootstrapResponse>('/api/bootstrap/household', input)),
-    );
+    return this.request(firstValueFrom(this.http.post<BootstrapResponse>('/api/bootstrap', input)));
   }
 
   getActiveCycle(): Promise<ShoppingCycle> {
@@ -64,6 +64,13 @@ export class ShoppingApiService {
           { ...this.auth(), params },
         ),
       ).then(({ suggestions }) => suggestions),
+    );
+  }
+
+  getOffers(supermarket?: OfferSupermarketId): Promise<OffersResponse> {
+    const params = supermarket ? new HttpParams().set('supermarket', supermarket) : undefined;
+    return this.request(
+      firstValueFrom(this.http.get<OffersResponse>('/api/offers', { ...this.auth(), params })),
     );
   }
 

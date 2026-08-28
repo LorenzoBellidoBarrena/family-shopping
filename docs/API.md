@@ -19,14 +19,17 @@ Las respuestas de error tienen formato estable y no exponen excepciones internas
 
 ## Rutas públicas
 
-| Método | Ruta                       | Resultado                                                     |
-| ------ | -------------------------- | ------------------------------------------------------------- |
-| `GET`  | `/api/health`              | Salud del Worker.                                             |
-| `POST` | `/api/bootstrap/household` | Crea el único hogar, primer device y ciclo activo.            |
-| `POST` | `/api/pairings/consume`    | Consume una vez un código no caducado y entrega device token. |
+| Método | Ruta                    | Resultado                                                     |
+| ------ | ----------------------- | ------------------------------------------------------------- |
+| `GET`  | `/api/health`           | Salud del Worker.                                             |
+| `POST` | `/api/bootstrap`        | Crea el único hogar, primer device y ciclo activo.            |
+| `POST` | `/api/pairings/consume` | Consume una vez un código no caducado y entrega device token. |
 
 Bootstrap recibe `accessKey`, `householdName` opcional y `deviceName` opcional. Si el hogar ya está
 inicializado devuelve `409`, incluso aunque la clave sea correcta.
+
+`/api/bootstrap/household` se conserva como alias compatible, pero el cliente utiliza
+`/api/bootstrap`. Ningún código de vinculación se envía a ninguno de esos endpoints.
 
 ## Rutas privadas
 
@@ -35,13 +38,20 @@ inicializado devuelve `409`, incluso aunque la clave sea correcta.
 | `POST`   | `/api/pairings`                        | Código de ocho caracteres, URL y expiración a diez minutos. |
 | `GET`    | `/api/shopping-cycle/active`           | Ciclo activo con items en orden estable.                    |
 | `POST`   | `/api/items`                           | Añade un producto.                                          |
-| `PATCH`  | `/api/items/:id`                       | Edita nombre, cantidad, unidad o supermercado.              |
+| `PATCH`  | `/api/items/:id`                       | Edita nombre, cantidad, unidad, supermercado o categoría.   |
 | `DELETE` | `/api/items/:id`                       | Elimina un producto; devuelve `204`.                        |
 | `POST`   | `/api/items/:id/toggle`                | Marca/desmarca sin alterar `sortOrder`.                     |
 | `POST`   | `/api/shopping-cycle/complete`         | Completa sólo si hay productos y todos están marcados.      |
 | `POST`   | `/api/shopping-cycle/clear`            | Ejecuta `CANCEL`, `CLEAR_ALL` o `CARRY_PENDING`.            |
 | `GET`    | `/api/supermarkets`                    | Supermercados activos ordenados.                            |
+| `GET`    | `/api/offers`                          | Ofertas publicadas, aisladas por proveedor.                 |
 | `GET`    | `/api/product-preferences/suggestions` | Preferencias por frecuencia y prefijo normalizado.          |
+
+`GET /api/offers?supermarket=lidl|mercadona|carrefour|dia` acepta un filtro opcional. Una caída
+parcial no hace fallar los demás proveedores y devuelve `partial: true`. Cada oferta incluye precio
+en céntimos, vigencia, fuente, requisito de fidelización, coincidencias con la lista y `fixture`.
+En Prompt 6 todos los resultados son fixtures explícitos; `catalogAvailability: PUBLISHED` no
+representa stock real.
 
 ## Producto
 
@@ -52,12 +62,18 @@ Creación completa:
   "name": "Leche",
   "quantity": "1.5",
   "unit": "litro",
-  "supermarketId": "lidl"
+  "supermarketId": "lidl",
+  "category": "DAIRY"
 }
 ```
 
 Sólo `name` es obligatorio; los defaults son cantidad `"1"`, unidad `"unidad"` y supermercado
-`null`. Un `PATCH` conserva cualquier campo omitido.
+`null`. `category` es opcional al crear: primero se usa la preferencia aprendida, después el
+clasificador local y finalmente `OTHER`. Un `PATCH` conserva cualquier campo omitido.
+
+Los códigos admitidos son `DAIRY`, `BAKERY`, `FRUIT`, `VEGETABLES`, `MEAT`, `FISH`, `EGGS`,
+`DRINKS`, `WATER`, `COFFEE_TEA`, `PASTA_RICE`, `PANTRY`, `CANNED`, `FROZEN`, `SWEETS`, `CLEANING`,
+`HYGIENE`, `PAPER`, `PETS` y `OTHER`. Una categoría desconocida devuelve `INVALID_CATEGORY`.
 
 Unidades: `unidad`, `pack`, `kg`, `g`, `litro`, `ml`, `caja`, `botella`, `otro`.
 
@@ -69,7 +85,8 @@ Unidades: `unidad`, `pack`, `kg`, `g`, `litro`, `ml`, `caja`, `botella`, `otro`.
 
 - `CANCEL`: no modifica nada.
 - `CLEAR_ALL`: cierra como `CLEARED` y crea una lista vacía.
-- `CARRY_PENDING`: conserva sólo pendientes, con nuevos IDs, mismo orden/datos y `checked=false`.
+- `CARRY_PENDING`: conserva sólo pendientes, con nuevos IDs, mismo orden/datos (incluida categoría)
+  y `checked=false`.
 
 Completar utiliza un endpoint distinto y cierra el ciclo como `COMPLETED`; nunca ocurre de forma
 automática.
@@ -84,3 +101,12 @@ Cada aviso es JSON con `version: 1`, `id`, `type`, `householdId`, `revision`, `o
 `payload`. Los tipos actuales son `ITEM_CREATED`, `ITEM_UPDATED`, `ITEM_CHECKED`,
 `ITEM_UNCHECKED`, `ITEM_DELETED`, `LIST_CLOSED` y `LIST_REPLACED`. El aviso indica que hay una nueva
 versión; el cliente vuelve a leer `/api/shopping-cycle/active` para reconciliarse con D1.
+
+## Vinculación
+
+Un dispositivo autorizado crea un código corto aleatorio mediante `POST /api/pairings`. La respuesta
+incluye `code`, `expiresAt` y una URL `/pair?code=...`. El código dura diez minutos, se guarda sólo
+como SHA-256 y se consume una vez mediante el endpoint público `POST /api/pairings/consume`.
+
+El consumo no lleva `Authorization`: el código temporal es la credencial limitada de ese flujo. La
+respuesta contiene un device token nuevo; nunca reutiliza ni copia el token del dispositivo creador.
