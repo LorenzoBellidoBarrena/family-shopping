@@ -32,6 +32,7 @@ export abstract class FixtureProvider implements SupermarketProvider {
       normalizedProductName: normalizeCatalogText(offer.productName),
       brand: offer.brand ?? null,
       category: offer.category,
+      visualCategory: 'OTHER',
       packageLabel: offer.packageLabel,
       normalPriceCents: offer.normalPriceCents ?? null,
       offerPriceCents: offer.offerPriceCents,
@@ -43,6 +44,11 @@ export abstract class FixtureProvider implements SupermarketProvider {
       requiresLoyaltyCard: offer.requiresLoyaltyCard ?? false,
       catalogAvailability: 'PUBLISHED',
       fixture: true,
+      lidlPlusPriceCents: null,
+      upcoming: false,
+      geographicScope: 'STORE',
+      channel: 'STORE',
+      observedAt: '2026-08-28T00:00:00.000Z',
     }));
   }
 }

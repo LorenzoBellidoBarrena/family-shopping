@@ -2,8 +2,8 @@
 
 ## Fase actual: extracción estructurada de campañas Lidl
 
-Estado: import real local `SUCCESS` e idempotente mediante las fichas estructuradas públicas de las
-campañas Lidl. Pendiente de autorización expresa antes de cualquier import remoto.
+Estado: primera importación Lidl controlada en producción completada, validada e idempotente; la
+pestaña Ofertas usa exclusivamente datos reales Lidl. Cron continúa desactivado.
 
 ### Implementado
 
@@ -22,10 +22,17 @@ campañas Lidl. Pendiente de autorización expresa antes de cualquier import rem
   comercial. No calcula €/kg o €/l a partir del envase.
 - Dos imports reales locales limpios: ambos `SUCCESS`, 54 productos, 54 precios, 86 ofertas vistas,
   43 Lidl Plus y 0 rechazados. Tras repetir permanecen 54 productos, 54 snapshots y 86 ofertas.
+- Dos imports manuales en D1 de producción el 29 de agosto de 2026: ambos `SUCCESS`, 53 productos,
+  53 precios, 84 ofertas vistas, 42 Lidl Plus y 0 rechazados. D1 permaneció en 53/53/84 tras la
+  segunda pasada, con 0 duplicados y validación oficial 10/10.
+- En producción hay 83 filas de oferta vigentes para 45 productos y 1 oferta futura; la UI agrupa
+  precio regular, general y Lidl Plus por producto, y separa «Próximamente».
+- `SUPERMARKET_FEATURE_ENABLED=true` en la versión
+  `2c67aea7-479e-4b89-b8f0-85dcaacd46db`; `crons: []` continúa sin cambios.
 - Cuatro fixtures de campaña mínimos añadidos (índice, vigente, próxima y malformado); se conservan
   todos los fixtures anteriores y el demo visible continúa aislado.
-- No se creó migración `0007`, no se desplegó, no se importó remotamente, el feature flag sigue en
-  `false` y el cron sigue vacío.
+- No se creó migración `0007`; la infraestructura existente soportó ofertas general y Lidl Plus.
+  Sólo Lidl se importó remotamente y el cron sigue vacío.
 
 - `DiaProvider` real separado en discovery, fetch, parse, normalize, validación y persistencia.
 - Discovery estable de `/ofertas` y del localizador oficial de Zafra, sin URLs de campaña fechadas.
@@ -96,7 +103,7 @@ campañas Lidl. Pendiente de autorización expresa antes de cualquier import rem
 
 - 27 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden y caché offline.
 - 61 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import e
-  idempotencia; 27 pruebas Angular, 88 en total.
+  idempotencia; 28 pruebas Angular, 89 en total.
 - Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.

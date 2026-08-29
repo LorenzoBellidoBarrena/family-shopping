@@ -124,9 +124,9 @@ Los endpoints de importación usan `x-import-admin-key` con el secret independie
 | `POST` | `/api/admin/imports/lidl`      | Import manual acotado de Lidl.      |
 
 El `POST` admite `limit=1..20`; Lidl admite `limit=1..100` para repartir un límite global entre un
-máximo de cinco campañas. Además exige `SUPERMARKET_FEATURE_ENABLED=true`. Producción lo
-mantiene en `false` y no tiene `IMPORT_ADMIN_KEY` configurado todavía. Las respuestas nunca incluyen
-HTML remoto, cookies, stack traces ni secretos.
+máximo de cinco campañas. Exige siempre `IMPORT_ADMIN_KEY`, independientemente del flag visible, de
+modo que una importación controlada puede validarse antes de habilitar la UI. Las respuestas nunca
+incluyen HTML remoto, cookies, stack traces ni secretos.
 
 El endpoint DIA descubre las tiendas oficiales de Zafra y consulta la página pública de ofertas.
 Los precios de esta última se etiquetan `ONLINE`; no se atribuyen a una tienda física. En la

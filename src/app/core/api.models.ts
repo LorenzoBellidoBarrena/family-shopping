@@ -74,17 +74,23 @@ export interface CatalogOffer {
   normalizedProductName: string;
   brand: string | null;
   category: string | null;
+  visualCategory: ProductCategory;
   packageLabel: string | null;
   normalPriceCents: number | null;
   offerPriceCents: number;
   unitPriceCents: number | null;
   promotionType: string;
-  validFrom: string;
-  validUntil: string;
+  validFrom: string | null;
+  validUntil: string | null;
   sourceUrl: string;
   requiresLoyaltyCard: boolean;
   catalogAvailability: 'PUBLISHED';
   fixture: boolean;
+  lidlPlusPriceCents: number | null;
+  upcoming: boolean;
+  geographicScope: 'NATIONAL' | 'REGIONAL' | 'STORE' | 'ONLINE' | 'UNKNOWN';
+  channel: 'STORE' | 'ONLINE' | 'BOTH' | 'UNKNOWN';
+  observedAt: string;
   relatedToList: boolean;
   matchedItemNames: string[];
 }
@@ -92,6 +98,8 @@ export interface CatalogOffer {
 export interface OffersResponse {
   offers: CatalogOffer[];
   partial: boolean;
+  mode: 'DEMO' | 'REAL';
+  lastUpdatedAt: string | null;
 }
 
 export interface ItemInput {

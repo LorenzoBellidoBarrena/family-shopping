@@ -185,8 +185,8 @@ con fixtures sean correctos.
 
 ### Seguridad y operación
 
-- `IMPORT_ADMIN_KEY` es independiente del device token y no está configurado en producción.
-- `SUPERMARKET_FEATURE_ENABLED=false` por defecto.
+- `IMPORT_ADMIN_KEY` es independiente del device token y está configurado como secret en producción.
+- `SUPERMARKET_FEATURE_ENABLED=true` activa sólo la lectura de ofertas reales persistidas.
 - Máximo 20 fichas por petición administrativa, 8 segundos y 2 MiB por respuesta.
 - Allowlist estricta evita SSRF y se vuelve a validar la URL tras redirects.
 - Un producto inválido produce `PARTIAL`; discovery bloqueado produce `FAILED` sin stack trace.
@@ -250,3 +250,18 @@ El [`aviso legal`](https://www.lidl.es/c/aviso-legal/s10075786) sigue siendo una
 operativa: antes de automatizar o importar en producción conviene obtener autorización o confirmar
 un canal oficial de reutilización. La implementación sólo guarda los campos mínimos necesarios y
 no redistribuye páginas completas.
+
+### Primera importación controlada en producción
+
+El 29 de agosto de 2026 se aplicó remotamente `0006_nullable_offer_validity.sql` sin alterar datos
+familiares. Dos imports manuales protegidos por `IMPORT_ADMIN_KEY` terminaron `SUCCESS` con métricas
+idénticas: 53 productos, 53 precios, 84 ofertas vistas, 42 Lidl Plus y 0 rechazados. Tras ambos runs
+D1 contiene 2 registros de ámbito (tienda Zafra y scope regional Badajoz), 53 productos, 53
+snapshots y 84 ofertas; no existen duplicados.
+
+La validación remota confirmó 10/10 fichas contra el JSON oficial. Hay 83 filas vigentes para 45
+productos y una futura. `LidlD1OffersProvider` devuelve sólo datos persistidos no expirados, agrupa
+oferta general y Lidl Plus y marca las fechas futuras como `upcoming`. El scope lógico se presenta
+como Badajoz y nunca como establecimiento físico de Zafra. El modo real está activo mediante
+`SUPERMARKET_FEATURE_ENABLED=true`; el import administrativo conserva su gate independiente por
+secret y `crons: []` sigue desactivado.

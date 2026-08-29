@@ -65,6 +65,12 @@ export class App implements OnInit {
       this.store.allChecked() && cycle !== null && this.dismissedCompletionCycle() !== cycle.id
     );
   });
+  protected readonly activeOffers = computed(() =>
+    this.store.offers().filter((offer) => !offer.upcoming),
+  );
+  protected readonly upcomingOffers = computed(() =>
+    this.store.offers().filter((offer) => offer.upcoming),
+  );
 
   protected setupAccessKey = '';
   protected householdName = 'Mi hogar';
@@ -266,6 +272,20 @@ export class App implements OnInit {
     return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(
       cents / 100,
     );
+  }
+
+  protected formatOfferDate(value: string | null): string {
+    if (!value) return 'Sin fecha publicada';
+    const [year, month, day] = value.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  protected formatUpdatedAt(value: string | null): string {
+    if (!value) return 'Sin actualización registrada';
+    return new Intl.DateTimeFormat('es-ES', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(new Date(value));
   }
 
   protected formatUnit(quantity: string, unit: Unit): string {

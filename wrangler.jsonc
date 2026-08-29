@@ -23,7 +23,7 @@
     "bindings": [{ "name": "HOUSEHOLD_COORDINATOR", "class_name": "HouseholdCoordinator" }],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HouseholdCoordinator"] }],
-  "vars": { "SUPERMARKET_FEATURE_ENABLED": "false" },
+  "vars": { "SUPERMARKET_FEATURE_ENABLED": "true" },
   "triggers": { "crons": [] },
   "observability": { "enabled": true },
 }

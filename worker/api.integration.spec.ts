@@ -523,20 +523,20 @@ describe('device pairing', () => {
 });
 
 describe('supermarket offers module', () => {
-  it('protects import administration with a separate secret and disabled feature flag', async () => {
+  it('protects imports with a separate secret while allowing controlled manual runs', async () => {
     const unauthorized = await api('/api/admin/imports');
     const listing = await api('/api/admin/imports', {
       headers: { 'x-import-admin-key': 'integration-test-import-admin-key' },
     });
-    const disabled = await api('/api/admin/imports/carrefour', {
+    const invalidCarrefour = await api('/api/admin/imports/carrefour?limit=0', {
       method: 'POST',
       headers: { 'x-import-admin-key': 'integration-test-import-admin-key' },
     });
-    const diaDisabled = await api('/api/admin/imports/dia', {
+    const invalidDia = await api('/api/admin/imports/dia?limit=0', {
       method: 'POST',
       headers: { 'x-import-admin-key': 'integration-test-import-admin-key' },
     });
-    const lidlDisabled = await api('/api/admin/imports/lidl', {
+    const invalidLidl = await api('/api/admin/imports/lidl?limit=0', {
       method: 'POST',
       headers: { 'x-import-admin-key': 'integration-test-import-admin-key' },
     });
@@ -544,11 +544,11 @@ describe('supermarket offers module', () => {
     expect(unauthorized.status).toBe(401);
     expect(listing.status).toBe(200);
     expect(await readJson<{ imports: unknown[] }>(listing)).toEqual({ imports: [] });
-    expect(disabled.status).toBe(503);
-    expect(diaDisabled.status).toBe(503);
-    expect(lidlDisabled.status).toBe(503);
-    expect(await readJson<{ error: { code: string } }>(disabled)).toMatchObject({
-      error: { code: 'SUPERMARKET_FEATURE_DISABLED' },
+    expect(invalidCarrefour.status).toBe(400);
+    expect(invalidDia.status).toBe(400);
+    expect(invalidLidl.status).toBe(400);
+    expect(await readJson<{ error: { code: string } }>(invalidCarrefour)).toMatchObject({
+      error: { code: 'INVALID_LIMIT' },
     });
   });
 

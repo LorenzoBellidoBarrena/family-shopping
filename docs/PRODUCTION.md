@@ -78,12 +78,11 @@ El smoke posterior confirmó shell y ruta SPA `200`, salud `200`, manifest stand
 worker, CSS externo, JSON `404` para API desconocida, protección `401` de API privada y WebSocket,
 y binding del Durable Object SQLite.
 
-La fundación Carrefour se desplegó como `12a5eb2a-b17e-4e30-a193-2c82f6de74e3` después de aplicar
-`0005_carrefour_import_foundation.sql`. El despliegue no activa la función: la variable
-`SUPERMARKET_FEATURE_ENABLED` vale `false`, `triggers.crons` está vacío y `IMPORT_ADMIN_KEY` no está
-configurado. No existen ejecuciones, productos ni precios importados en D1 remoto. Los endpoints
-administrativos responden `503` hasta que el propietario configure el secret y habilite el flag de
-forma explícita.
+La fundación Carrefour se desplegó inicialmente como `12a5eb2a-b17e-4e30-a193-2c82f6de74e3`.
+Desde el 29 de agosto de 2026, `0006_nullable_offer_validity.sql` también está aplicada y Lidl tiene
+datos reales validados. `SUPERMARKET_FEATURE_ENABLED` vale `true`, `IMPORT_ADMIN_KEY` está
+configurado y `triggers.crons` permanece vacío. Los endpoints administrativos siguen protegidos por
+el secret aunque el flag visible cambie.
 
 ## Puesta en marcha de los móviles
 

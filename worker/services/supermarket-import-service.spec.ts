@@ -17,6 +17,7 @@ import type {
 import { CarrefourImportProvider } from '../providers/carrefour-import-provider';
 import { DiaProvider } from '../providers/dia-provider';
 import { LidlProvider } from '../providers/lidl-provider';
+import { LidlD1OffersProvider } from '../providers/lidl-d1-offers-provider';
 import { SupermarketImportRepository } from '../repositories/supermarket-import-repository';
 import { SupermarketImportService } from './supermarket-import-service';
 
@@ -224,6 +225,23 @@ describe('SupermarketImportService', () => {
         (SELECT COUNT(*) FROM import_runs WHERE provider = 'lidl') AS runs`,
     ).first<{ stores: number; products: number; prices: number; offers: number; runs: number }>();
     expect(counts).toEqual({ stores: 2, products: 3, prices: 3, offers: 5, runs: 2 });
+
+    const published = await new LidlD1OffersProvider(
+      testEnv.DB,
+      '2026-08-28',
+    ).listPublishedOffers();
+    const grapes = published.find((offer) => offer.productName === 'Uva blanca sin semilla');
+    const shandy = published.find((offer) => offer.productName === 'Argus Shandy');
+    expect(published).toHaveLength(3);
+    expect(grapes).toMatchObject({
+      fixture: false,
+      city: 'Badajoz',
+      normalPriceCents: 299,
+      offerPriceCents: 235,
+      lidlPlusPriceCents: 189,
+      upcoming: false,
+    });
+    expect(shandy).toMatchObject({ offerPriceCents: 420, lidlPlusPriceCents: 329, upcoming: true });
   });
 
   it('fails a Lidl campaign safely when it has no structured products', async () => {

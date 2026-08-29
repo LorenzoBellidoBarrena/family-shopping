@@ -65,6 +65,7 @@ class FakeTokenStore {
 }
 
 class FakeShoppingApi {
+  offersMode: 'DEMO' | 'REAL' = 'DEMO';
   serverCycle = cycle([item('milk', 'Leche', 1000), item('bread', 'Pan', 2000, true)]);
   readonly supermarkets: Supermarket[] = [
     { id: 'lidl', code: 'LIDL', name: 'Lidl' },
@@ -95,6 +96,7 @@ class FakeShoppingApi {
       normalizedProductName: 'leche entera 1 litro',
       brand: 'Fixture Lidl',
       category: 'Lácteos',
+      visualCategory: 'DAIRY',
       packageLabel: '1 l',
       normalPriceCents: 105,
       offerPriceCents: 89,
@@ -106,6 +108,11 @@ class FakeShoppingApi {
       requiresLoyaltyCard: false,
       catalogAvailability: 'PUBLISHED',
       fixture: true,
+      lidlPlusPriceCents: null,
+      upcoming: false,
+      geographicScope: 'STORE',
+      channel: 'STORE',
+      observedAt: '2026-08-28T00:00:00.000Z',
       relatedToList: true,
       matchedItemNames: ['Leche'],
     },
@@ -121,6 +128,8 @@ class FakeShoppingApi {
       ? this.offerData.filter((offer) => offer.supermarketId === supermarket)
       : this.offerData,
     partial: false,
+    mode: this.offersMode,
+    lastUpdatedAt: '2026-08-28T00:00:00.000Z',
   }));
   readonly bootstrap = vi.fn(async (input: BootstrapInput): Promise<BootstrapResponse> => {
     void input;
@@ -346,6 +355,20 @@ describe('Shopping list interface', () => {
     await settle();
     expect(api.getOffers).toHaveBeenLastCalledWith('dia');
     expect(fixture.nativeElement.querySelectorAll('.offer-card')).toHaveLength(0);
+  });
+
+  it('labels real Lidl data as Badajoz and never as demo', async () => {
+    api.offersMode = 'REAL';
+    api.offerData[0].fixture = false;
+    api.offerData[0].lidlPlusPriceCents = 79;
+    button('％ Ofertas').click();
+    await settle();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Datos reales · Lidl');
+    expect(text).toContain('Badajoz');
+    expect(text).toContain('Lidl Plus: 0,79');
+    expect(text).not.toContain('Los precios no son datos comerciales reales');
   });
 
   it('edits a product with explicit controls', async () => {

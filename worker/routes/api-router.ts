@@ -6,6 +6,7 @@ import { AuthService } from '../services/auth-service';
 import { ShoppingService } from '../services/shopping-service';
 import { RealtimePublisher } from '../services/realtime-publisher';
 import { OffersService } from '../services/offers-service';
+import { LidlD1OffersProvider } from '../providers/lidl-d1-offers-provider';
 import { readJsonObject } from '../validation';
 import { routeAdminImports } from './admin-import-router';
 
@@ -25,7 +26,10 @@ export const routeApi = async (
   const auth = new AuthService(repository, env.HOUSEHOLD_ACCESS_KEY);
   const shopping = new ShoppingService(repository);
   const realtime = new RealtimePublisher(env, repository, context);
-  const offers = new OffersService(repository);
+  const offers =
+    env.SUPERMARKET_FEATURE_ENABLED === 'true'
+      ? new OffersService(repository, [new LidlD1OffersProvider(env.DB)], 'REAL')
+      : new OffersService(repository);
 
   if (url.pathname === '/api/health') {
     return request.method === 'GET' ? jsonResponse({ status: 'ok' }) : methodNotAllowed(['GET']);

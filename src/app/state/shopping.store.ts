@@ -35,6 +35,8 @@ export class ShoppingStore {
   private readonly currentOffers = signal<CatalogOffer[]>([]);
   private readonly offersLoadingState = signal(false);
   private readonly offersPartialState = signal(false);
+  private readonly offersModeState = signal<'DEMO' | 'REAL'>('DEMO');
+  private readonly offersLastUpdatedState = signal<string | null>(null);
   private readonly loadingState = signal(true);
   private readonly busyState = signal(false);
   private readonly syncingState = signal(false);
@@ -50,6 +52,8 @@ export class ShoppingStore {
   readonly offers = this.currentOffers.asReadonly();
   readonly offersLoading = this.offersLoadingState.asReadonly();
   readonly offersPartial = this.offersPartialState.asReadonly();
+  readonly offersMode = this.offersModeState.asReadonly();
+  readonly offersLastUpdatedAt = this.offersLastUpdatedState.asReadonly();
   readonly loading = this.loadingState.asReadonly();
   readonly busy = this.busyState.asReadonly();
   readonly syncing = this.syncingState.asReadonly();
@@ -148,6 +152,8 @@ export class ShoppingStore {
       const result = await this.api.getOffers(supermarket);
       this.currentOffers.set(result.offers);
       this.offersPartialState.set(result.partial);
+      this.offersModeState.set(result.mode);
+      this.offersLastUpdatedState.set(result.lastUpdatedAt);
     } catch (error) {
       this.handleError(error);
     } finally {

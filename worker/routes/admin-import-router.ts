@@ -32,9 +32,6 @@ export const routeAdminImports = async (request: Request, env: Env): Promise<Res
     url.pathname === '/api/admin/imports/lidl'
   ) {
     if (request.method !== 'POST') return methodNotAllowed(['POST']);
-    if (env.SUPERMARKET_FEATURE_ENABLED !== 'true') {
-      throw new ApiError(503, 'SUPERMARKET_FEATURE_DISABLED', 'La importación está desactivada.');
-    }
     const rawLimit = url.searchParams.get('limit') ?? '5';
     if (!/^\d{1,3}$/u.test(rawLimit)) {
       throw badRequest('INVALID_LIMIT', 'limit no tiene un formato válido.');

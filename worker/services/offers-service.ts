@@ -27,9 +27,18 @@ export class OffersService {
   constructor(
     private readonly repository: OffersRepository,
     private readonly providers: readonly SupermarketProvider[] = defaultProviders(),
+    private readonly mode: 'DEMO' | 'REAL' = 'DEMO',
   ) {}
 
-  async list(device: Device, url: URL): Promise<{ offers: PresentedOffer[]; partial: boolean }> {
+  async list(
+    device: Device,
+    url: URL,
+  ): Promise<{
+    offers: PresentedOffer[];
+    partial: boolean;
+    mode: 'DEMO' | 'REAL';
+    lastUpdatedAt: string | null;
+  }> {
     const supermarket = url.searchParams.get('supermarket');
     if (supermarket && !OFFER_SUPERMARKETS.some((id) => id === supermarket)) {
       throw badRequest('INVALID_SUPERMARKET', 'El filtro de supermercado no es válido.');
@@ -46,26 +55,33 @@ export class OffersService {
       result.status === 'fulfilled' ? result.value : [],
     );
 
+    const presented = offers
+      .map((offer): PresentedOffer => {
+        const matchedItemNames = cycle.items
+          .filter((item) => productsMatch(item.name, offer.productName))
+          .map((item) => item.name);
+        return {
+          ...offer,
+          relatedToList: matchedItemNames.length > 0,
+          matchedItemNames,
+        };
+      })
+      .sort((left, right) =>
+        left.relatedToList === right.relatedToList
+          ? left.supermarketName.localeCompare(right.supermarketName, 'es')
+          : left.relatedToList
+            ? -1
+            : 1,
+      );
     return {
-      offers: offers
-        .map((offer): PresentedOffer => {
-          const matchedItemNames = cycle.items
-            .filter((item) => productsMatch(item.name, offer.productName))
-            .map((item) => item.name);
-          return {
-            ...offer,
-            relatedToList: matchedItemNames.length > 0,
-            matchedItemNames,
-          };
-        })
-        .sort((left, right) =>
-          left.relatedToList === right.relatedToList
-            ? left.supermarketName.localeCompare(right.supermarketName, 'es')
-            : left.relatedToList
-              ? -1
-              : 1,
-        ),
+      offers: presented,
       partial: providerResults.some((result) => result.status === 'rejected'),
+      mode: this.mode,
+      lastUpdatedAt:
+        presented
+          .map((offer) => offer.observedAt)
+          .sort()
+          .at(-1) ?? null,
     };
   }
 }

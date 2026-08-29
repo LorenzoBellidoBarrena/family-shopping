@@ -148,15 +148,24 @@
       <section class="offers-view" aria-labelledby="offers-title">
         <div class="offers-heading">
           <div>
-            <p class="eyebrow">Datos de demostración</p>
+            <p class="eyebrow">
+              {{ store.offersMode() === 'REAL' ? 'Datos reales · Lidl' : 'Datos de demostración' }}
+            </p>
             <h2 id="offers-title">Ofertas</h2>
           </div>
-          <span>Zafra</span>
+          <span>{{ store.offersMode() === 'REAL' ? 'Badajoz' : 'Zafra' }}</span>
         </div>
-        <p class="supporting-text">
-          Esta primera versión usa fixtures para validar la experiencia. Los precios no son datos
-          comerciales reales.
-        </p>
+        @if (store.offersMode() === 'REAL') {
+          <p class="supporting-text">
+            Campañas regionales de Badajoz · Última actualización:
+            {{ formatUpdatedAt(store.offersLastUpdatedAt()) }}
+          </p>
+        } @else {
+          <p class="supporting-text">
+            Esta primera versión usa fixtures para validar la experiencia. Los precios no son datos
+            comerciales reales.
+          </p>
+        }
         <div class="offer-filters" aria-label="Filtrar ofertas por supermercado">
           @for (filter of offerFilters; track filter.id) {
             <button
@@ -192,31 +201,91 @@
               Un proveedor no respondió; se muestran los demás resultados.
             </div>
           }
-          <div class="offer-list">
-            @for (offer of store.offers(); track offer.id) {
-              <article class="offer-card" [class.offer-card--related]="offer.relatedToList">
-                <div class="offer-card-heading">
-                  <span>{{ offer.supermarketName }}</span>
-                  @if (offer.relatedToList) {
-                    <strong>Está en tu lista</strong>
+          @if (activeOffers().length > 0) {
+            <div class="section-heading"><h3>Ofertas activas</h3></div>
+            <div class="offer-list">
+              @for (offer of activeOffers(); track offer.id) {
+                <article class="offer-card" [class.offer-card--related]="offer.relatedToList">
+                  <div class="offer-card-heading">
+                    <span>{{ offer.supermarketName }}</span>
+                    @if (offer.relatedToList) {
+                      <strong>Está en tu lista</strong>
+                    }
+                  </div>
+                  <h3>
+                    <span aria-hidden="true">{{
+                      categoryDetails(offer.visualCategory).emoji
+                    }}</span>
+                    {{ offer.productName }}
+                  </h3>
+                  <p>
+                    {{ offer.brand || 'Lidl' }} · {{ offer.packageLabel || 'Formato no publicado' }}
+                  </p>
+                  <div class="offer-price">
+                    <strong>Ahora: {{ formatPrice(offer.offerPriceCents) }}</strong>
+                    @if (offer.normalPriceCents !== null) {
+                      <span>Antes: {{ formatPrice(offer.normalPriceCents) }}</span>
+                    }
+                  </div>
+                  @if (offer.lidlPlusPriceCents !== null) {
+                    <p class="loyalty-note">
+                      Lidl Plus: {{ formatPrice(offer.lidlPlusPriceCents) }}
+                    </p>
                   }
-                </div>
-                <h3>{{ offer.productName }}</h3>
-                <p>{{ offer.brand }} · {{ offer.packageLabel }}</p>
-                <div class="offer-price">
-                  <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
-                  @if (offer.normalPriceCents !== null) {
-                    <span>{{ formatPrice(offer.normalPriceCents) }}</span>
+                  <p class="offer-promotion">{{ offer.promotionType }}</p>
+                  <p>
+                    Válido: {{ formatOfferDate(offer.validFrom) }} –
+                    {{ formatOfferDate(offer.validUntil) }}
+                  </p>
+                  <p>
+                    Badajoz · {{ offer.channel === 'STORE' ? 'Sólo en tienda' : offer.channel }}
+                  </p>
+                  <p class="catalog-note">Producto publicado · disponibilidad no confirmada</p>
+                </article>
+              }
+            </div>
+          }
+          @if (upcomingOffers().length > 0) {
+            <div class="section-heading"><h3>Próximamente</h3></div>
+            <div class="offer-list">
+              @for (offer of upcomingOffers(); track offer.id) {
+                <article class="offer-card" [class.offer-card--related]="offer.relatedToList">
+                  <div class="offer-card-heading">
+                    <span>{{ offer.supermarketName }}</span>
+                    @if (offer.relatedToList) {
+                      <strong>Está en tu lista</strong>
+                    }
+                  </div>
+                  <h3>
+                    <span aria-hidden="true">{{
+                      categoryDetails(offer.visualCategory).emoji
+                    }}</span>
+                    {{ offer.productName }}
+                  </h3>
+                  <p>
+                    {{ offer.brand || 'Lidl' }} · {{ offer.packageLabel || 'Formato no publicado' }}
+                  </p>
+                  <div class="offer-price">
+                    <strong>Ahora: {{ formatPrice(offer.offerPriceCents) }}</strong>
+                    @if (offer.normalPriceCents !== null) {
+                      <span>Antes: {{ formatPrice(offer.normalPriceCents) }}</span>
+                    }
+                  </div>
+                  @if (offer.lidlPlusPriceCents !== null) {
+                    <p class="loyalty-note">
+                      Lidl Plus: {{ formatPrice(offer.lidlPlusPriceCents) }}
+                    </p>
                   }
-                </div>
-                <p class="offer-promotion">{{ offer.promotionType }}</p>
-                @if (offer.requiresLoyaltyCard) {
-                  <p class="loyalty-note">Requiere tarjeta de fidelización</p>
-                }
-                <p class="catalog-note">Producto publicado · disponibilidad no confirmada</p>
-              </article>
-            }
-          </div>
+                  <p class="offer-promotion">{{ offer.promotionType }}</p>
+                  <p>Disponible desde {{ formatOfferDate(offer.validFrom) }}</p>
+                  <p>
+                    Badajoz · {{ offer.channel === 'STORE' ? 'Sólo en tienda' : offer.channel }}
+                  </p>
+                  <p class="catalog-note">Producto publicado · disponibilidad no confirmada</p>
+                </article>
+              }
+            </div>
+          }
         }
       </section>
     } @else {
