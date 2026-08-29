@@ -16,6 +16,8 @@ import { NetworkStatusService } from '../core/network-status.service';
 import { OfflineCacheService } from '../core/offline-cache.service';
 import { RealtimeService } from '../core/realtime.service';
 import { ShoppingApiError, ShoppingApiService } from '../core/shopping-api.service';
+import { classifyNormalizedProductName } from '../../shared/product-category';
+import { normalizeProductName } from '../../shared/product-name';
 
 @Injectable({ providedIn: 'root' })
 export class ShoppingStore {
@@ -174,37 +176,129 @@ export class ShoppingStore {
   }
 
   async addItem(input: ItemInput): Promise<boolean> {
-    return this.runOnline(async () => {
+    if (!this.startOnlineMutation()) return false;
+    const previousCycle = this.currentCycle();
+    if (!previousCycle) {
+      this.busyState.set(false);
+      return false;
+    }
+    const normalizedName = normalizeProductName(input.name);
+    const learnedCategory = this.habitualProducts().find(
+      (preference) => preference.normalizedName === normalizedName,
+    )?.category;
+    const now = new Date().toISOString();
+    const optimisticId = `optimistic-${crypto.randomUUID()}`;
+    const optimistic: ShoppingItem = {
+      id: optimisticId,
+      shoppingCycleId: previousCycle.id,
+      name: input.name.trim().replace(/\s+/gu, ' '),
+      normalizedName,
+      quantity: input.quantity ?? '1',
+      unit: input.unit ?? 'unidad',
+      supermarketId: input.supermarketId ?? null,
+      category: input.category ?? learnedCategory ?? classifyNormalizedProductName(normalizedName),
+      checked: false,
+      sortOrder: Math.max(0, ...previousCycle.items.map((item) => item.sortOrder)) + 1000,
+      createdAt: now,
+      updatedAt: now,
+      checkedAt: null,
+    };
+    this.updateItems((items) => [...items, optimistic]);
+    try {
       const item = await this.api.addItem(input);
-      this.updateItems((items) => [...items, item]);
+      this.updateItems((items) =>
+        items.map((current) => (current.id === optimisticId ? item : current)),
+      );
+      this.persistCycleSafely();
       void this.refreshHabits();
-    });
+      return true;
+    } catch (error) {
+      this.currentCycle.set(previousCycle);
+      this.handleError(error);
+      return false;
+    } finally {
+      this.busyState.set(false);
+    }
   }
 
   async updateItem(itemId: string, input: ItemInput): Promise<boolean> {
-    return this.runOnline(async () => {
+    if (!this.startOnlineMutation()) return false;
+    const previousCycle = this.currentCycle();
+    const current = previousCycle?.items.find((item) => item.id === itemId);
+    if (!previousCycle || !current) {
+      this.busyState.set(false);
+      return false;
+    }
+    const normalizedName = normalizeProductName(input.name);
+    this.updateItems((items) =>
+      items.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              name: input.name.trim().replace(/\s+/gu, ' '),
+              normalizedName,
+              quantity: input.quantity ?? item.quantity,
+              unit: input.unit ?? item.unit,
+              supermarketId:
+                input.supermarketId === undefined ? item.supermarketId : input.supermarketId,
+              category: input.category ?? item.category,
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    );
+    try {
       const updated = await this.api.updateItem(itemId, input);
       this.updateItems((items) => items.map((item) => (item.id === itemId ? updated : item)));
+      this.persistCycleSafely();
       void this.refreshHabits();
-    });
+      return true;
+    } catch (error) {
+      this.currentCycle.set(previousCycle);
+      this.handleError(error);
+      return false;
+    } finally {
+      this.busyState.set(false);
+    }
   }
 
   async toggleItem(itemId: string): Promise<boolean> {
     if (this.busyState()) return false;
     if (this.offline()) return this.toggleOffline(itemId);
+    const previousCycle = this.currentCycle();
+    const current = previousCycle?.items.find((item) => item.id === itemId);
+    if (!previousCycle || !current) return false;
+    const desiredChecked = !current.checked;
+    const now = new Date().toISOString();
     this.busyState.set(true);
     this.errorState.set(null);
     this.errorCodeState.set(null);
+    this.updateItems((items) =>
+      items.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              checked: desiredChecked,
+              checkedAt: desiredChecked ? now : null,
+              updatedAt: now,
+            }
+          : item,
+      ),
+    );
     try {
       const updated = await this.api.toggleItem(itemId);
       this.updateItems((items) => items.map((item) => (item.id === itemId ? updated : item)));
-      await this.persistCycle();
+      this.persistCycleSafely();
       return true;
     } catch (error) {
       if (this.isNetworkFailure(error)) {
+        await this.cache.queueToggle({ itemId, desiredChecked, createdAt: now });
+        await this.updatePendingCount();
+        await this.persistCycle();
         this.cachedState.set(true);
-        return this.toggleOffline(itemId);
+        return true;
       }
+      this.currentCycle.set(previousCycle);
       this.handleError(error);
       return false;
     } finally {
@@ -213,10 +307,24 @@ export class ShoppingStore {
   }
 
   async deleteItem(itemId: string): Promise<boolean> {
-    return this.runOnline(async () => {
+    if (!this.startOnlineMutation()) return false;
+    const previousCycle = this.currentCycle();
+    if (!previousCycle?.items.some((item) => item.id === itemId)) {
+      this.busyState.set(false);
+      return false;
+    }
+    this.updateItems((items) => items.filter((item) => item.id !== itemId));
+    try {
       await this.api.deleteItem(itemId);
-      this.updateItems((items) => items.filter((item) => item.id !== itemId));
-    });
+      this.persistCycleSafely();
+      return true;
+    } catch (error) {
+      this.currentCycle.set(previousCycle);
+      this.handleError(error);
+      return false;
+    } finally {
+      this.busyState.set(false);
+    }
   }
 
   async complete(): Promise<boolean> {
@@ -368,15 +476,7 @@ export class ShoppingStore {
   }
 
   private async runOnline(operation: () => Promise<void>): Promise<boolean> {
-    if (this.busyState()) return false;
-    if (this.offline()) {
-      this.errorCodeState.set('NETWORK_UNAVAILABLE');
-      this.errorState.set('Sin conexión sólo se pueden marcar o desmarcar productos.');
-      return false;
-    }
-    this.busyState.set(true);
-    this.errorState.set(null);
-    this.errorCodeState.set(null);
+    if (!this.startOnlineMutation()) return false;
     try {
       await operation();
       await this.persistCycle();
@@ -389,9 +489,26 @@ export class ShoppingStore {
     }
   }
 
+  private startOnlineMutation(): boolean {
+    if (this.busyState()) return false;
+    if (this.offline()) {
+      this.errorCodeState.set('NETWORK_UNAVAILABLE');
+      this.errorState.set('Sin conexión sólo se pueden marcar o desmarcar productos.');
+      return false;
+    }
+    this.busyState.set(true);
+    this.errorState.set(null);
+    this.errorCodeState.set(null);
+    return true;
+  }
+
   private async persistCycle(): Promise<void> {
     const cycle = this.currentCycle();
     if (cycle) await this.cache.saveCycle(cycle);
+  }
+
+  private persistCycleSafely(): void {
+    void this.persistCycle().catch(() => undefined);
   }
 
   private async updatePendingCount(): Promise<void> {

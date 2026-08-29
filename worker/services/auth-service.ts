@@ -10,10 +10,13 @@ import {
 } from '../security/tokens';
 import { optionalName, requiredName, type JsonObject } from '../validation';
 
+const DEVICE_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+
 export class AuthService {
   constructor(
     private readonly repository: D1Repository,
     private readonly householdAccessKey: string | undefined,
+    private readonly context?: Pick<ExecutionContext, 'waitUntil'>,
   ) {}
 
   async bootstrap(body: JsonObject): Promise<{
@@ -72,7 +75,12 @@ export class AuthService {
     if (!/^[A-Za-z0-9_-]{40,100}$/u.test(token)) throw unauthorized();
     const device = await this.repository.findActiveDevice(await sha256(token));
     if (!device) throw unauthorized();
-    await this.repository.touchDevice(device.id, new Date().toISOString());
+    const lastSeen = new Date(device.lastSeenAt).getTime();
+    if (!Number.isFinite(lastSeen) || Date.now() - lastSeen >= DEVICE_TOUCH_INTERVAL_MS) {
+      const touch = this.repository.touchDevice(device.id, new Date().toISOString());
+      if (this.context) this.context.waitUntil(touch.catch(() => undefined));
+      else await touch;
+    }
     return device;
   }
 

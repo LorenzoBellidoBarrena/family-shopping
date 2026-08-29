@@ -316,6 +316,28 @@ describe('Shopping list interface', () => {
     expect(fixture.nativeElement.textContent).toContain('Yogur');
   });
 
+  it('renders a new product before the server response arrives', async () => {
+    let resolveRequest!: (created: ShoppingItem) => void;
+    api.addItem.mockImplementationOnce(
+      () => new Promise<ShoppingItem>((resolve) => (resolveRequest = resolve)),
+    );
+    const input = fixture.nativeElement.querySelector('#quick-name') as HTMLInputElement;
+    input.value = 'Yogur';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    button('Añadir').click();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Yogur');
+    expect(TestBed.inject(ShoppingStore).busy()).toBe(true);
+
+    resolveRequest(item('server-yogurt', 'Yogur', 3000));
+    await settle();
+    expect(rowIds()).toContain('server-yogurt');
+  });
+
   it('toggles an item without moving it', async () => {
     const before = rowIds();
     const firstCheck = fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement;
@@ -339,6 +361,44 @@ describe('Shopping list interface', () => {
     expect(
       (fixture.nativeElement.querySelector('[data-item-id="milk"]') as HTMLElement).classList,
     ).not.toContain('checked');
+  });
+
+  it('shows a toggle immediately and keeps it after the server confirms it', async () => {
+    let resolveRequest!: (updated: ShoppingItem) => void;
+    api.toggleItem.mockImplementationOnce(
+      () => new Promise<ShoppingItem>((resolve) => (resolveRequest = resolve)),
+    );
+    const toggle = fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement;
+
+    toggle.click();
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement.querySelector('[data-item-id="milk"]') as HTMLElement).classList,
+    ).toContain('checked');
+
+    resolveRequest({ ...item('milk', 'Leche', 1000, true), quantity: '6', supermarketId: 'lidl' });
+    await settle();
+    expect(
+      (fixture.nativeElement.querySelector('[data-item-id="milk"]') as HTMLElement).classList,
+    ).toContain('checked');
+  });
+
+  it('rolls back an optimistic toggle when the server rejects it', async () => {
+    api.toggleItem.mockRejectedValueOnce(new Error('No se pudo guardar'));
+    const toggle = fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement;
+
+    toggle.click();
+    fixture.detectChanges();
+    expect(
+      (fixture.nativeElement.querySelector('[data-item-id="milk"]') as HTMLElement).classList,
+    ).toContain('checked');
+
+    await settle();
+    expect(
+      (fixture.nativeElement.querySelector('[data-item-id="milk"]') as HTMLElement).classList,
+    ).not.toContain('checked');
+    expect(fixture.nativeElement.textContent).toContain('No se pudo guardar');
   });
 
   it('shows offer fixtures, highlights list matches, and filters by supermarket', async () => {

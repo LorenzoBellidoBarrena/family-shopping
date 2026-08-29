@@ -220,14 +220,15 @@ export class App implements OnInit {
   protected async saveEdit(): Promise<void> {
     const item = this.editingItem();
     if (!item || !this.editName.trim()) return;
-    const success = await this.store.updateItem(item.id, {
+    const request = this.store.updateItem(item.id, {
       name: this.editName.trim(),
       quantity: this.editQuantity,
       unit: this.editUnit,
       supermarketId: this.editSupermarketId || null,
       category: this.editCategory,
     });
-    if (success) this.editingItem.set(null);
+    this.editingItem.set(null);
+    if (!(await request) && this.store.hasToken()) this.editingItem.set(item);
   }
 
   protected requestDelete(item: ShoppingItem): void {
@@ -238,8 +239,9 @@ export class App implements OnInit {
   protected async confirmDelete(): Promise<void> {
     const item = this.deletingItem();
     if (!item) return;
-    const success = await this.store.deleteItem(item.id);
-    if (success) this.deletingItem.set(null);
+    const request = this.store.deleteItem(item.id);
+    this.deletingItem.set(null);
+    if (!(await request) && this.store.hasToken()) this.deletingItem.set(item);
   }
 
   protected dismissCompletion(): void {

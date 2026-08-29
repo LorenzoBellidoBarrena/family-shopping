@@ -319,6 +319,15 @@ export class D1Repository {
     };
   }
 
+  private async getActiveCycleId(householdId: string): Promise<string> {
+    const cycle = await this.db
+      .prepare(`SELECT id FROM shopping_cycles WHERE household_id = ? AND status = 'ACTIVE'`)
+      .bind(householdId)
+      .first<{ id: string }>();
+    if (!cycle) throw notFound('No existe un ciclo de compra activo.');
+    return cycle.id;
+  }
+
   async getActiveItem(householdId: string, itemId: string): Promise<ShoppingItem> {
     const row = await this.db
       .prepare(
@@ -342,8 +351,8 @@ export class D1Repository {
     values: ItemValues,
     now: string,
   ): Promise<ShoppingItem> {
-    const cycle = await this.getActiveCycle(householdId);
-    await this.db.batch([
+    const cycleId = await this.getActiveCycleId(householdId);
+    const results = await this.db.batch<ItemRow>([
       this.db
         .prepare(
           `INSERT INTO shopping_items
@@ -351,24 +360,29 @@ export class D1Repository {
               supermarket_id, category, checked, sort_order, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0,
              (SELECT COALESCE(MAX(sort_order), 0) + 1000 FROM shopping_items
-              WHERE shopping_cycle_id = ?), ?, ?)`,
+              WHERE shopping_cycle_id = ?), ?, ?)
+           RETURNING id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
+                     supermarket_id, category, checked, sort_order, created_at, updated_at,
+                     checked_at`,
         )
         .bind(
           itemId,
-          cycle.id,
+          cycleId,
           values.name,
           values.normalizedName,
           values.quantityMilli,
           values.unit,
           values.supermarketId,
           values.category,
-          cycle.id,
+          cycleId,
           now,
           now,
         ),
       this.preferenceStatement(householdId, preferenceId, values, now, true),
     ]);
-    return this.getActiveItem(householdId, itemId);
+    const row = results[0]?.results[0];
+    if (!row) throw new Error('Unable to create shopping item');
+    return mapItem(row);
   }
 
   async updateItem(
@@ -379,11 +393,14 @@ export class D1Repository {
     now: string,
   ): Promise<ShoppingItem> {
     await this.getActiveItem(householdId, itemId);
-    await this.db.batch([
+    const results = await this.db.batch<ItemRow>([
       this.db
         .prepare(
           `UPDATE shopping_items SET name = ?, normalized_name = ?, quantity_milli = ?,
-             unit = ?, supermarket_id = ?, category = ?, updated_at = ? WHERE id = ?`,
+             unit = ?, supermarket_id = ?, category = ?, updated_at = ? WHERE id = ?
+           RETURNING id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
+                     supermarket_id, category, checked, sort_order, created_at, updated_at,
+                     checked_at`,
         )
         .bind(
           values.name,
@@ -397,27 +414,43 @@ export class D1Repository {
         ),
       this.preferenceStatement(householdId, preferenceId, values, now, false),
     ]);
-    return this.getActiveItem(householdId, itemId);
+    const row = results[0]?.results[0];
+    if (!row) throw notFound('El producto no existe en la lista activa.');
+    return mapItem(row);
   }
 
   async toggleItem(householdId: string, itemId: string, now: string): Promise<ShoppingItem> {
-    await this.getActiveItem(householdId, itemId);
-    await this.db
+    const row = await this.db
       .prepare(
         `UPDATE shopping_items
          SET checked = CASE checked WHEN 0 THEN 1 ELSE 0 END,
              checked_at = CASE checked WHEN 0 THEN ? ELSE NULL END,
              updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ? AND shopping_cycle_id IN (
+           SELECT id FROM shopping_cycles WHERE household_id = ? AND status = 'ACTIVE'
+         )
+         RETURNING id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
+                   supermarket_id, category, checked, sort_order, created_at, updated_at,
+                   checked_at`,
       )
-      .bind(now, now, itemId)
-      .run();
-    return this.getActiveItem(householdId, itemId);
+      .bind(now, now, itemId, householdId)
+      .first<ItemRow>();
+    if (!row) throw notFound('El producto no existe en la lista activa.');
+    return mapItem(row);
   }
 
   async deleteItem(householdId: string, itemId: string): Promise<void> {
-    await this.getActiveItem(householdId, itemId);
-    await this.db.prepare(`DELETE FROM shopping_items WHERE id = ?`).bind(itemId).run();
+    const deleted = await this.db
+      .prepare(
+        `DELETE FROM shopping_items
+         WHERE id = ? AND shopping_cycle_id IN (
+           SELECT id FROM shopping_cycles WHERE household_id = ? AND status = 'ACTIVE'
+         )
+         RETURNING id`,
+      )
+      .bind(itemId, householdId)
+      .first<{ id: string }>();
+    if (!deleted) throw notFound('El producto no existe en la lista activa.');
   }
 
   async completeCycle(

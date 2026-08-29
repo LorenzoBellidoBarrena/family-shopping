@@ -7,6 +7,16 @@ pestaña Ofertas usa exclusivamente datos reales Lidl. Cron continúa desactivad
 
 ### Implementado
 
+- Mutaciones de lista optimistas: altas, ediciones, borrados y checked/un-checked se reflejan en la
+  interfaz antes de recibir la respuesta remota, conservando rollback ante rechazo y cola offline
+  por estado final deseado.
+- Rutas D1 de toggle y borrado consolidadas en una consulta con `RETURNING`; altas y ediciones
+  devuelven la fila desde su escritura y evitan lecturas completas/redundantes.
+- El mantenimiento de `devices.last_seen_at` está limitado a una vez cada cinco minutos y se
+  ejecuta fuera de la respuesta cuando existe `ExecutionContext`.
+- Benchmark aislado con Worker + D1 local reales: altas de 25–48 ms, toggles de 20–23 ms y lectura
+  del ciclo de 15 ms, sin modificar la lista local del propietario.
+
 - `LidlProvider` real separado del fixture de UI y conectado al importador común y al endpoint
   protegido `POST /api/admin/imports/lidl`.
 - Discovery dinámico desde la portada oficial de campañas actuales, próximas y frescas relevantes;
@@ -101,9 +111,10 @@ pestaña Ofertas usa exclusivamente datos reales Lidl. Cron continúa desactivad
 
 ### Verificación
 
-- 27 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden y caché offline.
+- 32 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden, caché offline,
+  respuesta optimista y rollback.
 - 61 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import e
-  idempotencia; 28 pruebas Angular, 89 en total.
+  idempotencia; 93 pruebas en total.
 - Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.

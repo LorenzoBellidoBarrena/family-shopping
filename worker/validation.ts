@@ -1,6 +1,9 @@
 import { ApiError, badRequest } from './errors';
 import { UNITS, type ClearAction, type ItemValues, type Unit } from './domain/types';
 import { isProductCategory, type ProductCategory } from '../src/shared/product-category';
+import { normalizeProductName } from '../src/shared/product-name';
+
+export { normalizeProductName } from '../src/shared/product-name';
 
 export type JsonObject = Record<string, unknown>;
 const MAXIMUM_JSON_BYTES = 16 * 1024;
@@ -53,14 +56,6 @@ export const requiredName = (value: unknown, maximum = 120): string => {
   }
   return trimmed;
 };
-
-export const normalizeProductName = (value: string): string =>
-  value
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLocaleLowerCase('es-ES')
-    .replace(/[^\p{Letter}\p{Number}]+/gu, ' ')
-    .trim();
 
 export const parseQuantityMilli = (value: unknown): number => {
   if (value === undefined) return 1000;
