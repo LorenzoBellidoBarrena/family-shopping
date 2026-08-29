@@ -120,7 +120,7 @@ export class SupermarketImportRepository {
     observedAt: string,
   ): Promise<{
     priceInserted: boolean;
-    offerPersisted: boolean;
+    offersPersisted: number;
   }> {
     const storeId = await this.persistStore(providerId, catalogStore);
     const existing = await this.db
@@ -203,8 +203,7 @@ export class SupermarketImportRepository {
         .run();
     }
 
-    if (product.offer) {
-      const offer = product.offer;
+    for (const offer of product.offers) {
       const existingOffer = await this.db
         .prepare(
           `SELECT id FROM offers
@@ -272,7 +271,7 @@ export class SupermarketImportRepository {
       }
     }
 
-    return { priceInserted, offerPersisted: product.offer !== null };
+    return { priceInserted, offersPersisted: product.offers.length };
   }
 
   async persistStore(providerId: ProviderId, store: ImportedStore): Promise<string> {

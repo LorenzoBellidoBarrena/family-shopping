@@ -50,7 +50,7 @@ export interface ImportedProduct {
   sourceUrl: string;
   channel: OfferChannel;
   geographicScope: GeographicScope;
-  offer: ImportedOffer | null;
+  offers: ImportedOffer[];
 }
 
 export interface ParsedSupermarketProduct {
@@ -73,6 +73,10 @@ export interface ParsedSupermarketProduct {
   promotionTypeHint?: OfferType;
   channel?: OfferChannel;
   geographicScope?: GeographicScope;
+  offers?: ImportedOffer[];
+  parsedPriceCents?: number;
+  parsedUnitPriceCents?: number | null;
+  parsedUnitPriceUnit?: string | null;
 }
 
 export type ParsedCarrefourProduct = ParsedSupermarketProduct;

@@ -1,27 +1,29 @@
 # Progreso
 
-## Fase actual: evaluación del proveedor real Lidl
+## Fase actual: extracción estructurada de campañas Lidl
 
-Estado: acceso remoto desde Cloudflare confirmado, pero datos estructurados insuficientes para
-importar precios de forma fiable el 28 de agosto de 2026.
+Estado: import real local `SUCCESS` e idempotente mediante las fichas estructuradas públicas de las
+campañas Lidl. Pendiente de autorización expresa antes de cualquier import remoto.
 
 ### Implementado
 
 - `LidlProvider` real separado del fixture de UI y conectado al importador común y al endpoint
   protegido `POST /api/admin/imports/lidl`.
-- Discovery dinámico de los dos folletos oficiales de alimentación (actual y siguiente), excluyendo
-  bazar; no hay URL de campaña hardcodeada como origen permanente.
+- Discovery dinámico desde la portada oficial de campañas actuales, próximas y frescas relevantes;
+  el 29 de agosto de 2026 publicó una campaña actual y una próxima. Las URLs fechadas no se guardan
+  como configuración.
 - Tienda oficial confirmada en C. Torre San Francisco 2A, 06300 Zafra; slug canónico usado como ID
   público porque la página no publica un número de tienda.
-- Fetch mínimo desde Cloudflare: HTTP 200, sin redirect, 172096 bytes y folleto alimentario
-  detectado. Allowlist, timeout de 9 s, 1 MiB máximo, un reintento y redirects controlados.
-- El endpoint público del visor devuelve 49 páginas para el folleto actual y 39 para el siguiente,
-  pero `products: []`; sólo ofrece imágenes y OCR ambiguo. El parser no convierte esas cifras en
-  precios ni inventa scope de Zafra.
-- Dos imports reales locales: ambos `FAILED/LIDL_NO_VALID_PRODUCT`, 0 productos, 0 precios, 0
-  ofertas y una única tienda idempotente. No procede validación manual de diez precios.
-- Seis fixtures Lidl: cuatro fragmentos reales mínimos y dos sintéticos rotulados para probar el
-  contrato estructurado futuro y datos malformados; el fixture demo visible continúa aislado.
+- Fetch desde el runtime Cloudflare confirmado para portada, campaña vigente, próxima y frescos:
+  HTTP 200, HTML, sin redirects y respuestas entre 385 KiB y 1,50 MiB. Allowlist, timeout de 9 s,
+  máximo 2 MiB, un reintento y redirects revalidados.
+- Parser de `data-grid-data` con selección explícita de la región Badajoz publicada por Lidl,
+  precios normales/promocionales/Lidl Plus simultáneos, envase, vigencia Madrid, canal y categoría
+  comercial. No calcula €/kg o €/l a partir del envase.
+- Dos imports reales locales limpios: ambos `SUCCESS`, 54 productos, 54 precios, 86 ofertas vistas,
+  43 Lidl Plus y 0 rechazados. Tras repetir permanecen 54 productos, 54 snapshots y 86 ofertas.
+- Cuatro fixtures de campaña mínimos añadidos (índice, vigente, próxima y malformado); se conservan
+  todos los fixtures anteriores y el demo visible continúa aislado.
 - No se creó migración `0007`, no se desplegó, no se importó remotamente, el feature flag sigue en
   `false` y el cron sigue vacío.
 
@@ -93,8 +95,8 @@ importar precios de forma fiable el 28 de agosto de 2026.
 ### Verificación
 
 - 27 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden y caché offline.
-- 60 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import e
-  idempotencia; 27 pruebas Angular, 87 en total.
+- 61 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import e
+  idempotencia; 27 pruebas Angular, 88 en total.
 - Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.

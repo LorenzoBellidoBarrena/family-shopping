@@ -194,41 +194,59 @@ con fixtures sean correctos.
 - `scheduled()` está preparado, pero `crons: []`. Cloudflare Cron usa UTC; no se fija todavía una
   hora para evitar errores con el horario Europe/Madrid.
 
-## Implementación y evaluación Lidl
+## Implementación y validación de campañas Lidl
 
-`LidlProvider` usa como origen estable la
-[página oficial de folletos](https://www.lidl.es/c/descubre-nuevas-ofertas-cada-semana-folletos-lidl/s10087402).
-De su sección «Folletos de Alimentación» descubre los identificadores vigentes y consulta el JSON
-público que consume el visor en `endpoints.leaflets.schwarz/v4/flyer`. El discovery del 28 de agosto
-de 2026 encontró el folleto 24/8–30/8 y el siguiente 31/8–6/9, y excluyó los dos folletos de bazar.
+`LidlProvider` descubre enlaces desde la [portada oficial](https://www.lidl.es/) y admite únicamente
+rutas allowlisted de campañas semanales, próxima semana y frescos. El 29 de agosto de 2026 la portada
+publicó una campaña vigente y una próxima; los identificadores se extrajeron dinámicamente. El visor
+de folletos anterior se conserva sólo para metadata y ya no es la fuente de productos.
+
+Las páginas de campaña contienen JSON público por ficha en `data-grid-data`. El parser selecciona el
+bloque cuyo `regionsV2.regionName` normaliza a Badajoz (la fuente observada lo escribe «Bádajoz») y
+usa su `regionPriceId`; por ello el scope es `REGIONAL`, no `STORE`. Conserva por separado precio
+general, descuento general y precio `LOYALTY_PRICE/LIDL_PLUS`. Si la fuente no publica precio
+unitario explícito se deja `NULL`: nunca se calcula a partir del envase. Las vigencias UTC se
+convierten a fecha de `Europe/Madrid` y `endDateExclusive` se trata como límite exclusivo.
 
 La [tienda oficial de Zafra](https://www.lidl.es/s/es-ES/tiendas/zafra/c-torre-san-francisco-2a/)
-publica dirección, CP y coordenadas en JSON-LD, pero no un número de tienda. Se persiste el slug
-canónico `zafra-c-torre-san-francisco-2a` como identificador externo explícitamente limitado. El
-folleto usa región `0`; no demuestra selección de esa tienda ni precisión local, así que cualquier
-producto estructurado se marcaría `STORE/UNKNOWN`, nunca como precio confirmado de Zafra ni stock.
+continúa persistida desde su JSON-LD mediante el slug público `zafra-c-torre-san-francisco-2a`.
+Campaña regional y tienda física son registros distintos; publicación en catálogo no significa
+stock ni demuestra que el precio sea exclusivo de ese local.
 
-La prueba mínima desde el runtime local de Cloudflare respondió HTTP 200 sin redirect. El endpoint
-del visor también respondió, pero los dos folletos contenían respectivamente 49 y 39 páginas,
-`products: []` y sólo imágenes/texto OCR. Cadenas como `2196 1756 1316` no conservan separadores ni
-relación inequívoca entre precio normal, oferta y Lidl Plus. Conforme al criterio de confianza, el
-provider rechaza esos datos y no usa OCR para persistir importes.
+Desde el runtime local de Cloudflare, portada, campaña general, vigente, próxima y frescos
+respondieron HTTP 200, `text/html`, sin redirects y entre 385 KiB y 1,50 MiB. Se mantiene timeout de
+9 segundos, un reintento, máximo 2 MiB, allowlist y revalidación de redirects. No se usa OCR, PDF,
+cookies, sesión, proxy ni bypass.
 
-El [`robots.txt`](https://www.lidl.es/robots.txt) no bloquea la página de folletos ni la de tienda,
-pero sí rutas de usuario, búsqueda y parámetros internos que el provider no consulta. El
-[aviso legal](https://www.lidl.es/c/aviso-legal/s10075786) reserva los derechos sobre los contenidos
-y prohíbe su reproducción comercial sin autorización. Aunque esta aplicación es privada y la prueba
-fue mínima, antes de una importación periódica o de producción se debe obtener autorización o un feed
-estructurado; no se descargan ni redistribuyen PDFs/imágenes completos.
+Fixtures reales mínimos añadidos en `tests/fixtures/lidl/campaigns`: `index-real.html`,
+`current-real.html` y `next-real.html`; `malformed.html` es un límite sintético rotulado. Se
+conservan los fixtures anteriores para regresión. Las muestras reales cubren descuento general y
+Lidl Plus simultáneos, sólo Lidl Plus, multipack, envase, fechas, canal tienda y región.
 
-Los fixtures `overview-real`, `store-zafra-real`, `current-food-real` y `next-food-real` son
-fragmentos mínimos de respuestas públicas. `structured-products.synthetic` y `malformed` están
-rotulados como sintéticos: verifican respectivamente cómo se normalizarían euros explícitos, €/kg o
-€/l, precio directo, Lidl Plus, 3x2 y segunda unidad, y cómo se rechaza una colección inválida. No
-demuestran que esas promociones estuvieran presentes como registros importables en los folletos
-actuales.
+Dos imports reales limpios sobre D1 local terminaron `SUCCESS`: 54 productos, 54 precios, 86 ofertas
+vistas, 43 Lidl Plus y cero rechazados en cada run. Tras la segunda pasada D1 contiene exactamente
+54 productos, 54 snapshots y 86 ofertas: no hay duplicados. Diez productos se contrastaron contra
+el JSON estructurado oficial con coincidencia 10/10 en nombre, envase, precios, porcentajes, fechas,
+canal y scope. No se ejecutó import remoto, no se desplegó, no se activó el feature flag ni el cron.
 
-El import real local se ejecutó dos veces: tienda 1, productos 0, precios 0 y ofertas 0 en ambas
-pasadas; `import_runs` registró `FAILED/LIDL_NO_VALID_PRODUCT` sin duplicar la tienda. Por tanto no se
-hizo una tabla manual de diez precios, no se ejecutó import remoto, no se activó la pestaña real y no
-se modificaron DIA ni Carrefour.
+| Producto                      | App local                         | JSON oficial Lidl                                | Resultado |
+| ----------------------------- | --------------------------------- | ------------------------------------------------ | --------- |
+| Uva blanca sin semilla        | 2,35 €; Plus 1,89 €; 750 g        | 2,99→2,35 (-21%); Plus 1,89 (-36%); 750 g        | PASS      |
+| Ciruela roja                  | 2,72 €; Plus 1,99 €; granel       | 3,45→2,72 (-21%); Plus 1,99 (-42%); granel       | PASS      |
+| Burger de atún                | 2,95 €; Plus 2,44 €; 240 g        | 3,49→2,95 (-15%); Plus 2,44 (-30%); 240 g        | PASS      |
+| Filetes de merluza argentina  | 6,74 €; Plus 5,99 €; 970 g        | 7,49→6,74 (-10%); Plus 5,99 (-20%); 970 g        | PASS      |
+| Burger meat picada mixta      | 6,07 €; Plus 5,40 €; 1 kg         | 6,75→6,07 (-10%); Plus 5,40 (-20%); 1 kg         | PASS      |
+| Solomillo de pollo            | 2,82 €; Plus 2,51 €; aprox. 400 g | 3,14→2,82 (-10%); Plus 2,51 (-20%); aprox. 400 g | PASS      |
+| Mantequilla light             | 1,64 €; Plus 1,23 €; 250 g        | 2,05→1,64 (-20%); Plus 1,23 (-40%); 250 g        | PASS      |
+| Atún claro en aceite de oliva | base 2,59 €; Plus 1,79 €; 3x65 g  | 2,59→1,79 Plus (-30%); 3x65 g                    | PASS      |
+| Limón malla                   | 2,75 €; 1 kg; sin oferta          | 2,75 €; 1 kg; sin descuento publicado            | PASS      |
+| Cebolla malla                 | 1,59 €; 1 kg; sin oferta          | 1,59 €; 1 kg; sin descuento publicado            | PASS      |
+
+Las diez fichas publican región Badajoz, canal tienda y vigencia 24–30 de agosto cuando existe
+promoción. El precio unitario queda `NULL` en estas muestras porque la ficha no lo aporta de forma
+estructurada inequívoca.
+
+El [`aviso legal`](https://www.lidl.es/c/aviso-legal/s10075786) sigue siendo una limitación
+operativa: antes de automatizar o importar en producción conviene obtener autorización o confirmar
+un canal oficial de reutilización. La implementación sólo guarda los campos mínimos necesarios y
+no redistribuye páginas completas.

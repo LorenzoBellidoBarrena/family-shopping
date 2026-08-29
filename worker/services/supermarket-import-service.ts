@@ -71,7 +71,7 @@ export class SupermarketImportService {
       const sources = await provider.discover(limit);
       if (sources.length === 0)
         throw new Error(`${provider.providerId.toUpperCase()}_DISCOVERY_EMPTY`);
-      for (const sourceUrl of sources) {
+      sourceLoop: for (const sourceUrl of sources) {
         try {
           const document = await provider.fetch(sourceUrl);
           const parsed = provider.parse(document, sourceUrl);
@@ -81,6 +81,7 @@ export class SupermarketImportService {
             continue;
           }
           for (const candidate of parsed) {
+            if (productsSeen >= limit) break sourceLoop;
             try {
               const product = validateImportedProduct(provider.normalize(candidate));
               if (importedIds.has(product.externalId)) continue;
@@ -93,7 +94,7 @@ export class SupermarketImportService {
               );
               productsSeen += 1;
               pricesSeen += 1;
-              if (persisted.offerPersisted) offersSeen += 1;
+              offersSeen += persisted.offersPersisted;
             } catch (error) {
               rejectedItems += 1;
               firstError ??= safeErrorCode(error);

@@ -316,7 +316,9 @@ export class DiaProvider implements SupermarketImportProvider {
       sourceUrl: safeDiaUrl(product.sourceUrl).toString(),
       channel: product.channel ?? 'ONLINE',
       geographicScope: product.geographicScope ?? 'ONLINE',
-      offer: offerFrom(product, priceCents),
+      offers: [offerFrom(product, priceCents)].filter(
+        (offer): offer is ImportedOffer => offer !== null,
+      ),
     };
   }
 

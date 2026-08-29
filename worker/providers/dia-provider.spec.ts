@@ -26,7 +26,7 @@ describe('DiaProvider', () => {
       visualCategory: 'DAIRY',
       channel: 'ONLINE',
       geographicScope: 'ONLINE',
-      offer: null,
+      offers: [],
     });
   });
 
@@ -34,7 +34,7 @@ describe('DiaProvider', () => {
     const provider = new DiaProvider();
     const product = provider.normalize(provider.parse(clubDia, catalogUrl)[0]);
 
-    expect(product.offer).toMatchObject({
+    expect(product.offers[0]).toMatchObject({
       type: 'LOYALTY_PRICE',
       normalPriceCents: 349,
       offerPriceCents: 275,
@@ -54,14 +54,16 @@ describe('DiaProvider', () => {
       externalId: '267132',
       priceCents: 79,
       unitPriceCents: 198,
-      offer: {
-        type: 'LOYALTY_PRICE',
-        normalPriceCents: 99,
-        offerPriceCents: 79,
-        requiresLoyaltyCard: true,
-        validFrom: null,
-        validUntil: null,
-      },
+      offers: [
+        {
+          type: 'LOYALTY_PRICE',
+          normalPriceCents: 99,
+          offerPriceCents: 79,
+          requiresLoyaltyCard: true,
+          validFrom: null,
+          validUntil: null,
+        },
+      ],
     });
   });
 
@@ -69,7 +71,7 @@ describe('DiaProvider', () => {
     const provider = new DiaProvider();
     const product = provider.normalize(provider.parse(secondUnit, catalogUrl)[0]);
 
-    expect(product.offer).toMatchObject({
+    expect(product.offers[0]).toMatchObject({
       type: 'SECOND_UNIT_DISCOUNT',
       normalPriceCents: 435,
       offerPriceCents: 435,

@@ -1,23 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
-import currentFood from '../../tests/fixtures/lidl/current-food-real.json?raw';
-import malformed from '../../tests/fixtures/lidl/malformed.json?raw';
-import nextFood from '../../tests/fixtures/lidl/next-food-real.json?raw';
+import campaignIndex from '../../tests/fixtures/lidl/campaigns/index-real.html?raw';
+import campaignCurrent from '../../tests/fixtures/lidl/campaigns/current-real.html?raw';
+import campaignMalformed from '../../tests/fixtures/lidl/campaigns/malformed.html?raw';
+import campaignNext from '../../tests/fixtures/lidl/campaigns/next-real.html?raw';
 import overview from '../../tests/fixtures/lidl/overview-real.html?raw';
 import storeZafra from '../../tests/fixtures/lidl/store-zafra-real.html?raw';
-import structuredProducts from '../../tests/fixtures/lidl/structured-products.synthetic.json?raw';
 import { LidlProvider } from './lidl-provider';
 
-const currentUrl =
-  'https://endpoints.leaflets.schwarz/v4/flyer?flyer_identifier=019fef9e-46f1-7ecb-a1f6-39de23b7eb58&region_id=0';
+const currentUrl = 'https://www.lidl.es/c/ofertas-semanales/a10089449';
+const nextUrl = 'https://www.lidl.es/c/ofertas-proxima-semana/a10088432';
 const storeUrl = 'https://www.lidl.es/s/es-ES/tiendas/zafra/c-torre-san-francisco-2a/';
 
 describe('LidlProvider', () => {
-  it('discovers only the current and next food leaflets, never bazaar', () => {
+  it('discovers current, next and fresh food campaigns without bazaar links', () => {
+    const sources = new LidlProvider().parseCampaignDiscovery(campaignIndex);
+    expect(sources).toHaveLength(5);
+    expect(sources[0]).toBe(currentUrl);
+    expect(sources[1]).toBe(nextUrl);
+    expect(sources.join(' ')).not.toContain('/bazar/');
+  });
+
+  it('keeps the legacy public leaflet discovery only as metadata support', () => {
     const sources = new LidlProvider().parseDiscovery(overview);
     expect(sources).toHaveLength(2);
-    expect(sources[0]).toContain('019fef9e-46f1-7ecb-a1f6-39de23b7eb58');
-    expect(sources[1]).toContain('01a01412-0b5e-741e-8095-ee9c52230117');
-    expect(sources.join(' ')).not.toContain('019fef91-8a34-7e63-bac7-e989ff57c7b7');
+    expect(sources.every((source) => source.includes('endpoints.leaflets.schwarz'))).toBe(true);
   });
 
   it('parses the official Zafra store without inventing its public identifier', () => {
@@ -35,60 +41,67 @@ describe('LidlProvider', () => {
     ]);
   });
 
-  it('does not turn ambiguous OCR keywords from either real leaflet into prices', () => {
-    const provider = new LidlProvider();
-    expect(provider.parse(currentFood, currentUrl)).toEqual([]);
-    expect(
-      provider.parse(
-        nextFood,
-        'https://endpoints.leaflets.schwarz/v4/flyer?flyer_identifier=01a01412-0b5e-741e-8095-ee9c52230117&region_id=0',
-      ),
-    ).toEqual([]);
-  });
-
-  it('normalizes explicit structured euro and unit prices conservatively', () => {
+  it('uses the explicitly published Badajoz price and preserves general plus Lidl Plus offers', () => {
     const provider = new LidlProvider();
     const products = provider
-      .parse(structuredProducts, currentUrl)
+      .parse(campaignCurrent, currentUrl)
       .map((item) => provider.normalize(item));
     expect(products[0]).toMatchObject({
-      externalId: 'synthetic-leche-1l',
-      priceCents: 80,
-      unitPriceCents: 80,
-      unitPriceUnit: 'l',
-      visualCategory: 'DAIRY',
-      geographicScope: 'UNKNOWN',
-      offer: { type: 'DIRECT_DISCOUNT', normalPriceCents: 84, offerPriceCents: 80 },
+      externalId: '11029919',
+      name: 'Uva blanca sin semilla',
+      priceCents: 235,
+      packageQuantity: 750,
+      packageUnit: 'g',
+      channel: 'STORE',
+      geographicScope: 'REGIONAL',
+      offers: [
+        {
+          type: 'PERCENTAGE_DISCOUNT',
+          normalPriceCents: 299,
+          offerPriceCents: 235,
+          percentage: 21,
+        },
+        {
+          type: 'LOYALTY_PRICE',
+          normalPriceCents: 299,
+          offerPriceCents: 189,
+          percentage: 36,
+          loyaltyProgram: 'LIDL_PLUS',
+        },
+      ],
+    });
+    expect(products[0].offers[0]).toMatchObject({
+      validFrom: '2026-08-24',
+      validUntil: '2026-08-30',
     });
   });
 
-  it('distinguishes synthetic Lidl Plus, 3x2 and second-unit parser cases', () => {
+  it('keeps a Lidl Plus-only future campaign price separate from its published base price', () => {
     const provider = new LidlProvider();
-    const products = provider
-      .parse(structuredProducts, currentUrl)
-      .map((item) => provider.normalize(item));
-    expect(products[1].offer).toMatchObject({
-      type: 'LOYALTY_PRICE',
-      percentage: 40,
-      requiresLoyaltyCard: true,
-      loyaltyProgram: 'LIDL_PLUS',
+    const product = provider.normalize(provider.parse(campaignNext, nextUrl)[0]);
+    expect(product).toMatchObject({
+      externalId: '11003777',
+      name: 'Argus Shandy',
+      brand: 'Argus',
+      priceCents: 420,
+      packageQuantity: null,
+      packageUnit: '12x33 cl',
+      offers: [{ type: 'LOYALTY_PRICE', offerPriceCents: 329, normalPriceCents: 420 }],
     });
-    expect(products[2].offer).toMatchObject({
-      type: 'BUY_X_PAY_Y',
-      buyQuantity: 3,
-      payQuantity: 2,
-    });
-    expect(products[3].offer).toMatchObject({
-      type: 'SECOND_UNIT_DISCOUNT',
-      percentage: 50,
-    });
+    expect(product.offers[0]).toMatchObject({ validFrom: '2026-08-31', validUntil: '2026-09-06' });
   });
 
-  it('rejects malformed JSON and non-allowlisted sources', () => {
+  it('does not calculate a unit price from the package description', () => {
     const provider = new LidlProvider();
-    expect(() => provider.parse('{', currentUrl)).toThrow('LIDL_FLYER_JSON_INVALID');
-    expect(provider.parse(malformed, currentUrl)).toEqual([]);
-    expect(() => provider.parse(currentFood, 'https://example.com/flyer')).toThrow(
+    const product = provider.normalize(provider.parse(campaignNext, nextUrl)[0]);
+    expect(product.unitPriceCents).toBeNull();
+    expect(product.unitPriceUnit).toBeNull();
+  });
+
+  it('skips malformed cards and rejects non-allowlisted sources', () => {
+    const provider = new LidlProvider();
+    expect(provider.parse(campaignMalformed, currentUrl)).toEqual([]);
+    expect(() => provider.parse(campaignCurrent, 'https://example.com/campaign')).toThrow(
       'LIDL_SOURCE_NOT_ALLOWED',
     );
   });

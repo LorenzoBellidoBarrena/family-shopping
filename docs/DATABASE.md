@@ -77,11 +77,12 @@ Lidl reutiliza sin cambios `stores`, `external_products`, `store_products`, `pro
 guardar la tienda de Zafra mediante el slug canónico público porque la página no expone un número de
 tienda. Las coordenadas sólo se guardan porque aparecen explícitamente en su JSON-LD.
 
-El catálogo lógico `leaflets-es-region-0` representa el folleto general y nunca stock. Sólo se crea
-si existe al menos un producto con precio estructurado válido. La región pública `0` no demuestra
-pertenencia a Zafra, por lo que el scope de precios sería `UNKNOWN`, no `STORE`. En la ejecución real
-del 28 de agosto de 2026 no se persistieron productos, precios ni ofertas: el endpoint devolvió
-`products: []` y el import se cerró como `FAILED`.
+El catálogo lógico `campaign-region-badajoz` representa fichas de campaña cuyo `regionsV2` enlaza
+explícitamente Badajoz con el bloque de precio usado. Su scope es `REGIONAL`, nunca stock ni precio
+confirmado de la tienda de Zafra. Un producto puede tener simultáneamente una oferta general y otra
+`LOYALTY_PRICE/LIDL_PLUS`; la tabla `offers` existente ya admite ambas mediante filas distintas, por
+lo que no se creó migración `0007`. El histórico de `product_prices` sigue añadiendo snapshot sólo
+cuando cambia el precio.
 
 ## Atomicidad
 

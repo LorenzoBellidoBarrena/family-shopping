@@ -25,7 +25,7 @@ describe('CarrefourImportProvider', () => {
       commercialCategory: 'Lácteos > Leche',
       visualCategory: 'DAIRY',
       geographicScope: 'ONLINE',
-      offer: null,
+      offers: [],
     });
   });
 
@@ -33,7 +33,7 @@ describe('CarrefourImportProvider', () => {
     const provider = new CarrefourImportProvider();
     const product = provider.normalize(provider.parse(directOffer, source('R-521006986'))[0]);
 
-    expect(product.offer).toMatchObject({
+    expect(product.offers[0]).toMatchObject({
       type: 'DIRECT_DISCOUNT',
       normalPriceCents: 143,
       offerPriceCents: 129,
@@ -50,8 +50,8 @@ describe('CarrefourImportProvider', () => {
     const provider = new CarrefourImportProvider();
     const product = provider.normalize(provider.parse(fixture, source(id))[0]);
 
-    expect(product.offer).toMatchObject(expected);
-    if (expected.type === 'CASHBACK') expect(product.offer?.offerPriceCents).toBe(349);
+    expect(product.offers[0]).toMatchObject(expected);
+    if (expected.type === 'CASHBACK') expect(product.offers[0]?.offerPriceCents).toBe(349);
   });
 
   it('rejects incomplete and unexpected HTML without throwing', () => {

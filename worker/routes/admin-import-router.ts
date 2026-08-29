@@ -36,12 +36,13 @@ export const routeAdminImports = async (request: Request, env: Env): Promise<Res
       throw new ApiError(503, 'SUPERMARKET_FEATURE_DISABLED', 'La importación está desactivada.');
     }
     const rawLimit = url.searchParams.get('limit') ?? '5';
-    if (!/^\d{1,2}$/u.test(rawLimit)) {
-      throw badRequest('INVALID_LIMIT', 'limit debe ser un entero entre 1 y 20.');
+    if (!/^\d{1,3}$/u.test(rawLimit)) {
+      throw badRequest('INVALID_LIMIT', 'limit no tiene un formato válido.');
     }
     const limit = Number.parseInt(rawLimit, 10);
-    if (limit < 1 || limit > 20) {
-      throw badRequest('INVALID_LIMIT', 'limit debe ser un entero entre 1 y 20.');
+    const maximum = url.pathname.endsWith('/lidl') ? 100 : 20;
+    if (limit < 1 || limit > maximum) {
+      throw badRequest('INVALID_LIMIT', `limit debe ser un entero entre 1 y ${maximum}.`);
     }
     const imported = url.pathname.endsWith('/dia')
       ? await service.importDia(limit)

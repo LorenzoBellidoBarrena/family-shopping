@@ -123,7 +123,8 @@ Los endpoints de importación usan `x-import-admin-key` con el secret independie
 | `POST` | `/api/admin/imports/dia`       | Import manual acotado de DIA.       |
 | `POST` | `/api/admin/imports/lidl`      | Import manual acotado de Lidl.      |
 
-El `POST` admite `limit=1..20` y además exige `SUPERMARKET_FEATURE_ENABLED=true`. Producción lo
+El `POST` admite `limit=1..20`; Lidl admite `limit=1..100` para repartir un límite global entre un
+máximo de cinco campañas. Además exige `SUPERMARKET_FEATURE_ENABLED=true`. Producción lo
 mantiene en `false` y no tiene `IMPORT_ADMIN_KEY` configurado todavía. Las respuestas nunca incluyen
 HTML remoto, cookies, stack traces ni secretos.
 
@@ -132,7 +133,8 @@ Los precios de esta última se etiquetan `ONLINE`; no se atribuyen a una tienda 
 validación del 28 de agosto de 2026, DIA redirigió las peticiones desde el runtime Cloudflare a
 `/error`, por lo que la ejecución termina de forma encapsulada en `FAILED` y no persiste productos.
 
-El endpoint Lidl descubre dinámicamente los folletos de alimentación actual y siguiente y la tienda
-oficial de Zafra. El visor público responde desde Cloudflare, pero actualmente devuelve páginas y
-texto OCR con `products: []`; por ello la ejecución termina de forma segura en `FAILED` con
-`LIDL_NO_VALID_PRODUCT`, sin interpretar cifras OCR ambiguas ni atribuir precios a Zafra.
+El endpoint Lidl descubre desde la portada oficial las campañas alimentarias vigentes/próximas y la
+tienda oficial de Zafra. Extrae exclusivamente el JSON estructurado embebido en fichas públicas,
+selecciona la región Badajoz declarada por Lidl y persiste el catálogo con scope `REGIONAL`; nunca
+lo presenta como stock ni como precio específico de la tienda de Zafra. El visor de folletos se
+conserva sólo para metadata y no se procesa mediante OCR.

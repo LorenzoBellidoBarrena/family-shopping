@@ -6,10 +6,10 @@ import diaStores from '../../tests/fixtures/dia/stores.html?raw';
 import diaMalformed from '../../tests/fixtures/dia/malformed.html?raw';
 import diaOffersPage from '../../tests/fixtures/dia/offers-page.html?raw';
 import diaWeeklyOffers from '../../tests/fixtures/dia/weekly-offers.html?raw';
-import lidlCurrentFood from '../../tests/fixtures/lidl/current-food-real.json?raw';
-import lidlOverview from '../../tests/fixtures/lidl/overview-real.html?raw';
+import lidlCampaignCurrent from '../../tests/fixtures/lidl/campaigns/current-real.html?raw';
+import lidlCampaignIndex from '../../tests/fixtures/lidl/campaigns/index-real.html?raw';
+import lidlCampaignNext from '../../tests/fixtures/lidl/campaigns/next-real.html?raw';
 import lidlStore from '../../tests/fixtures/lidl/store-zafra-real.html?raw';
-import lidlStructuredProducts from '../../tests/fixtures/lidl/structured-products.synthetic.json?raw';
 import type {
   ParsedCarrefourProduct,
   SupermarketImportProvider,
@@ -193,9 +193,11 @@ describe('SupermarketImportService', () => {
       const url = input.toString();
       const body = url.includes('/tiendas/')
         ? lidlStore
-        : url.includes('/v4/flyer')
-          ? lidlStructuredProducts
-          : lidlOverview;
+        : url === 'https://www.lidl.es/'
+          ? lidlCampaignIndex
+          : url.includes('/ofertas-proxima-semana/')
+            ? lidlCampaignNext
+            : lidlCampaignCurrent;
       return new Response(body, { status: 200 });
     };
     const repository = new SupermarketImportRepository(testEnv.DB);
@@ -207,12 +209,12 @@ describe('SupermarketImportService', () => {
     expect(first).toMatchObject({
       provider: 'lidl',
       status: 'SUCCESS',
-      productsSeen: 4,
-      pricesSeen: 4,
-      offersSeen: 4,
+      productsSeen: 3,
+      pricesSeen: 3,
+      offersSeen: 5,
       rejectedItems: 0,
     });
-    expect(second).toMatchObject({ status: 'SUCCESS', productsSeen: 4, offersSeen: 4 });
+    expect(second).toMatchObject({ status: 'SUCCESS', productsSeen: 3, offersSeen: 5 });
     const counts = await testEnv.DB.prepare(
       `SELECT
         (SELECT COUNT(*) FROM stores WHERE supermarket_id = 'lidl') AS stores,
@@ -221,18 +223,18 @@ describe('SupermarketImportService', () => {
         (SELECT COUNT(*) FROM offers) AS offers,
         (SELECT COUNT(*) FROM import_runs WHERE provider = 'lidl') AS runs`,
     ).first<{ stores: number; products: number; prices: number; offers: number; runs: number }>();
-    expect(counts).toEqual({ stores: 2, products: 4, prices: 4, offers: 4, runs: 2 });
+    expect(counts).toEqual({ stores: 2, products: 3, prices: 3, offers: 5, runs: 2 });
   });
 
-  it('fails a real Lidl flyer safely when it has no structured products', async () => {
+  it('fails a Lidl campaign safely when it has no structured products', async () => {
     const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
       const url = input.toString();
       return new Response(
         url.includes('/tiendas/')
           ? lidlStore
-          : url.includes('/v4/flyer')
-            ? lidlCurrentFood
-            : lidlOverview,
+          : url === 'https://www.lidl.es/'
+            ? lidlCampaignIndex
+            : '<html>campaign without product cards</html>',
       );
     };
     const service = new SupermarketImportService(
@@ -246,7 +248,7 @@ describe('SupermarketImportService', () => {
       productsSeen: 0,
       pricesSeen: 0,
       offersSeen: 0,
-      rejectedItems: 2,
+      rejectedItems: 5,
       errorCode: 'LIDL_NO_VALID_PRODUCT',
     });
   });

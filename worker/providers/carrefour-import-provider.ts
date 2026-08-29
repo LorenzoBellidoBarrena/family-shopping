@@ -283,7 +283,9 @@ export class CarrefourImportProvider implements SupermarketImportProvider {
       sourceUrl: safeCarrefourUrl(product.sourceUrl, 'product').toString(),
       channel: 'ONLINE',
       geographicScope: 'ONLINE',
-      offer: promotion(product.promotionText, normalPriceCents, priceCents, validFrom, validUntil),
+      offers: [
+        promotion(product.promotionText, normalPriceCents, priceCents, validFrom, validUntil),
+      ].filter((offer): offer is ImportedOffer => offer !== null),
     };
   }
 

@@ -48,8 +48,10 @@ export const validateImportedProduct = (product: ImportedProduct): ImportedProdu
   ) {
     throw new Error('IMPORT_INVALID_SCOPE');
   }
-  if (product.offer) {
-    const offer = product.offer;
+  if (!Array.isArray(product.offers) || product.offers.length > 8) {
+    throw new Error('IMPORT_INVALID_OFFERS');
+  }
+  for (const offer of product.offers) {
     if (
       !OFFER_TYPES.includes(offer.type) ||
       !offer.label ||
