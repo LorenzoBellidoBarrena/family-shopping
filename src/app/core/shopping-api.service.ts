@@ -7,6 +7,7 @@ import type {
   BootstrapResponse,
   ClearAction,
   ItemInput,
+  ListOfferMatchesResponse,
   OfferSupermarketId,
   OffersResponse,
   PairingConsumeInput,
@@ -71,6 +72,30 @@ export class ShoppingApiService {
     const params = supermarket ? new HttpParams().set('supermarket', supermarket) : undefined;
     return this.request(
       firstValueFrom(this.http.get<OffersResponse>('/api/offers', { ...this.auth(), params })),
+    );
+  }
+
+  getListOfferMatches(): Promise<ListOfferMatchesResponse> {
+    return this.request(
+      firstValueFrom(this.http.get<ListOfferMatchesResponse>('/api/offers/for-list', this.auth())),
+    );
+  }
+
+  confirmProductMatch(itemId: string, externalProductId: string): Promise<void> {
+    return this.request(
+      firstValueFrom(
+        this.http.put<void>(
+          `/api/items/${itemId}/product-match`,
+          { externalProductId },
+          this.auth(),
+        ),
+      ),
+    );
+  }
+
+  dismissProductMatch(itemId: string): Promise<void> {
+    return this.request(
+      firstValueFrom(this.http.delete<void>(`/api/items/${itemId}/product-match`, this.auth())),
     );
   }
 

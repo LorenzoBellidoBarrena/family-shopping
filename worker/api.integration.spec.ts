@@ -104,6 +104,13 @@ const toggleItem = async (token: string, itemId: string): Promise<ShoppingItem> 
 beforeEach(async () => {
   await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
   await testEnv.DB.batch([
+    testEnv.DB.prepare(`DELETE FROM product_aliases`),
+    testEnv.DB.prepare(`DELETE FROM offers`),
+    testEnv.DB.prepare(`DELETE FROM product_prices`),
+    testEnv.DB.prepare(`DELETE FROM store_products`),
+    testEnv.DB.prepare(`DELETE FROM external_products`),
+    testEnv.DB.prepare(`DELETE FROM stores`),
+    testEnv.DB.prepare(`DELETE FROM import_runs`),
     testEnv.DB.prepare(`DELETE FROM pairing_codes`),
     testEnv.DB.prepare(`DELETE FROM product_preferences`),
     testEnv.DB.prepare(`DELETE FROM shopping_items`),
@@ -595,6 +602,100 @@ describe('supermarket offers module', () => {
     });
     expect(dia.offers).toHaveLength(2);
     expect(dia.offers.every((offer) => offer.supermarketId === 'dia')).toBe(true);
+  });
+
+  it('protects list matching and learns a confirmed Lidl product without renaming the item', async () => {
+    const { token, household } = await bootstrap();
+    const milk = await addItem(token, 'Leche', { supermarketId: 'lidl' });
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO stores
+           (id, supermarket_id, external_id, name, address, city, postal_code, active)
+         VALUES ('lidl-region', 'lidl', 'region-badajoz', 'Ámbito Badajoz',
+                 'Ámbito regional', 'Badajoz', '06000', 1)`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO import_runs
+           (id, provider, started_at, finished_at, status, products_seen, prices_seen, offers_seen)
+         VALUES ('run-lidl', 'lidl', '2026-08-29T05:00:00.000Z',
+                 '2026-08-29T05:00:10.000Z', 'SUCCESS', 1, 1, 1)`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO external_products
+           (id, supermarket_id, external_id, name, normalized_name, brand, category,
+            visual_category, package_quantity, package_unit, last_seen_at)
+         VALUES ('milk-semi', 'lidl', 'milk-semi', 'Leche semidesnatada Milbona',
+                 'leche semidesnatada milbona', 'MILBONA', 'Lácteos/Leche y nata',
+                 'DAIRY', 1, 'l', '2026-08-29T05:00:05.000Z')`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO store_products (store_id, product_id, catalog_status, observed_at)
+         VALUES ('lidl-region', 'milk-semi', 'PUBLISHED', '2026-08-29T05:00:05.000Z')`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO product_prices
+           (id, product_id, store_id, price_cents, observed_at, channel, geographic_scope)
+         VALUES ('price-milk', 'milk-semi', 'lidl-region', 99,
+                 '2026-08-29T05:00:05.000Z', 'STORE', 'REGIONAL')`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO offers
+           (id, product_id, store_id, normal_price_cents, offer_price_cents, promotion_type,
+            valid_from, valid_until, source_url, requires_loyalty_card, observed_at,
+            offer_type, channel, geographic_scope)
+         VALUES ('offer-milk', 'milk-semi', 'lidl-region', 99, 89, 'Oferta semanal',
+                 '2026-08-01', '2099-08-30', 'https://www.lidl.es/c/oferta', 0,
+                 '2026-08-29T05:00:05.000Z', 'DIRECT_DISCOUNT', 'STORE', 'REGIONAL')`,
+      ),
+    ]);
+
+    const unauthorized = await api('/api/offers/for-list');
+    const suggestions = await api('/api/offers/for-list', { token });
+    const suggestionBody = await readJson<{
+      matchedItems: {
+        shoppingItemId: string;
+        automaticMatchExternalProductId: string | null;
+        candidates: { externalProductId: string; confidence: string; activeOffers: unknown[] }[];
+      }[];
+    }>(suggestions);
+
+    expect(unauthorized.status).toBe(401);
+    expect(suggestions.status).toBe(200);
+    expect(suggestionBody.matchedItems[0]).toMatchObject({
+      shoppingItemId: milk.id,
+      automaticMatchExternalProductId: null,
+      candidates: [
+        {
+          externalProductId: 'milk-semi',
+          confidence: 'MEDIUM',
+          activeOffers: expect.any(Array),
+        },
+      ],
+    });
+
+    const saved = await api(`/api/items/${milk.id}/product-match`, {
+      method: 'PUT',
+      token,
+      body: { externalProductId: 'milk-semi' },
+    });
+    const learned = await api('/api/offers/for-list', { token });
+    const learnedBody = await readJson<{
+      matchedItems: {
+        automaticMatchExternalProductId: string | null;
+        candidates: { externalProductId: string; confidence: string; preferred: boolean }[];
+      }[];
+    }>(learned);
+    const canonical = await api('/api/shopping-cycle/active', { token });
+
+    expect(saved.status).toBe(200);
+    expect(learnedBody.matchedItems[0]).toMatchObject({
+      automaticMatchExternalProductId: 'milk-semi',
+      candidates: [{ externalProductId: 'milk-semi', confidence: 'HIGH', preferred: true }],
+    });
+    expect((await readJson<CycleResponse>(canonical)).cycle).toMatchObject({
+      householdId: household.id,
+      items: [{ id: milk.id, name: 'Leche' }],
+    });
   });
 });
 

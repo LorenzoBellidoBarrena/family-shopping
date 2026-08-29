@@ -24,6 +24,7 @@ export abstract class FixtureProvider implements SupermarketProvider {
   async listPublishedOffers(): Promise<CatalogOffer[]> {
     return this.offers.map((offer) => ({
       id: `${this.supermarketId}-${offer.id}`,
+      externalProductId: `${this.supermarketId}-${offer.id}`,
       supermarketId: this.supermarketId,
       supermarketName: this.supermarketName,
       storeName: this.storeName,

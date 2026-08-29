@@ -66,6 +66,7 @@ export type OfferSupermarketId = (typeof OFFER_SUPERMARKET_IDS)[number];
 
 export interface CatalogOffer {
   id: string;
+  externalProductId: string;
   supermarketId: OfferSupermarketId;
   supermarketName: string;
   storeName: string;
@@ -99,6 +100,47 @@ export interface OffersResponse {
   offers: CatalogOffer[];
   partial: boolean;
   mode: 'DEMO' | 'REAL';
+  lastUpdatedAt: string | null;
+}
+
+export type MatchConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface ListMatchCandidate {
+  externalProductId: string;
+  productName: string;
+  normalizedProductName: string;
+  brand: string | null;
+  commercialCategory: string | null;
+  visualCategory: ProductCategory;
+  packageLabel: string | null;
+  currentPriceCents: number | null;
+  score: number;
+  confidence: Exclude<MatchConfidence, 'LOW'>;
+  reasons: string[];
+  preferred: boolean;
+  activeOffers: CatalogOffer[];
+}
+
+export interface ShoppingItemOfferMatch {
+  shoppingItemId: string;
+  shoppingItemName: string;
+  category: ProductCategory;
+  quantity: string;
+  unit: Unit;
+  supermarketId: string | null;
+  checked: boolean;
+  dismissed: boolean;
+  automaticMatchExternalProductId: string | null;
+  candidates: ListMatchCandidate[];
+}
+
+export interface ListOfferMatchesResponse {
+  matchedItems: ShoppingItemOfferMatch[];
+  unmatchedItems: {
+    shoppingItemId: string;
+    shoppingItemName: string;
+    reason: 'NO_CANDIDATE' | 'PREFERRED_OTHER_SUPERMARKET' | 'DISMISSED';
+  }[];
   lastUpdatedAt: string | null;
 }
 

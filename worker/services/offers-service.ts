@@ -10,7 +10,7 @@ import { DiaFixtureProvider } from '../providers/dia-fixture-provider';
 import { LidlFixtureProvider } from '../providers/lidl-fixture-provider';
 import { MercadonaProvider } from '../providers/mercadona-provider';
 import { D1Repository } from '../repositories/d1-repository';
-import { productsMatch } from './product-matching';
+import { scoreProductMatch } from './product-matching';
 
 interface OffersRepository {
   getActiveCycle(householdId: string): ReturnType<D1Repository['getActiveCycle']>;
@@ -61,7 +61,26 @@ export class OffersService {
     const presented = offers
       .map((offer): PresentedOffer => {
         const matchedItemNames = cycle.items
-          .filter((item) => productsMatch(item.name, offer.productName))
+          .filter(
+            (item) =>
+              !item.checked &&
+              (item.supermarketId === null ||
+                item.supermarketId === 'any' ||
+                item.supermarketId === offer.supermarketId) &&
+              scoreProductMatch(
+                {
+                  normalizedName: item.normalizedName,
+                  category: item.category,
+                  supermarketId: item.supermarketId,
+                },
+                {
+                  externalProductId: offer.externalProductId,
+                  normalizedName: offer.normalizedProductName,
+                  category: offer.category,
+                  visualCategory: offer.visualCategory,
+                },
+              ).confidence !== 'LOW',
+          )
           .map((item) => item.name);
         return {
           ...offer,

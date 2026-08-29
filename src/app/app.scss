@@ -321,6 +321,107 @@ button:disabled {
   gap: 0.7rem;
 }
 
+.match-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.match-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--brand);
+  border-radius: 1rem;
+  background: var(--brand-soft);
+}
+
+.match-card-heading {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.match-card-heading > span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.match-candidate {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.8rem;
+  border-radius: 0.85rem;
+  background: #fff;
+}
+
+.match-candidate > div:first-child {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.match-candidate > div:first-child span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.match-button {
+  justify-self: start;
+}
+
+.saving-note {
+  color: var(--brand-strong);
+  font-weight: 800;
+}
+
+.match-suggestions {
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--surface-raised);
+}
+
+.match-suggestions summary {
+  min-height: 2rem;
+  color: var(--brand-strong);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.match-review-item {
+  display: grid;
+  gap: 0.45rem;
+  padding-block: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+.match-review-item > p {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.match-review-item > button:not(.text-button) {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: start;
+  min-height: 3rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+}
+
+.match-review-item button small {
+  color: var(--muted);
+}
+
+.match-review-item .match-choice--selected {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
 .offer-card {
   display: grid;
   gap: 0.55rem;

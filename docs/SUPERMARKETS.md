@@ -2,10 +2,11 @@
 
 ## Alcance de esta fase
 
-El módulo está preparado para Lidl, Mercadona, Carrefour y DIA con foco en Zafra (06300). Los
-parsers de Carrefour y DIA usan fixtures reales mínimos, pero ninguna fuente remota es estable desde
-Cloudflare y no se ha ejecutado ningún import en producción. La pestaña `Ofertas` continúa usando
-fixtures marcados como demostración; no deben interpretarse como precios vigentes.
+El módulo está preparado para Lidl, Mercadona, Carrefour y DIA con foco en Zafra (06300). Lidl usa
+catálogo y ofertas reales persistidos diariamente desde campañas públicas de la región Badajoz.
+Carrefour y DIA conservan parsers/fixtures aislados, pero sus fuentes remotas no son estables desde
+Cloudflare. La pestaña `Ofertas` muestra exclusivamente datos reales Lidl cuando el feature flag
+está activo; nunca los mezcla con fixtures.
 
 La lista familiar no depende de este módulo. Cada proveedor implementa `SupermarketProvider` y se
 consulta con `Promise.allSettled`: si una cadena falla, las demás siguen respondiendo y la API marca
@@ -24,23 +25,36 @@ el resultado como parcial.
 «disponible en catálogo». No confirma existencias en tienda.
 
 La categoría visual de la lista (`ProductCategory`, por ejemplo `DAIRY → 🥛`) no sustituye estas
-categorías comerciales. `external_products.category` y `product_aliases.category` siguen siendo
-campos libres del proveedor y podrán representar niveles más concretos como leche semidesnatada.
-Cuando existan catálogos reales se definirá un mapping explícito hacia la categoría visual; en esta
-fase ambas taxonomías permanecen separadas y el algoritmo de matching no se modifica.
+categorías comerciales. `external_products.category` conserva el texto del proveedor y
+`external_products.visual_category` almacena el mapping visual cuando existe evidencia. Ambas son
+señales del matcher, nunca una identidad suficiente.
 
-## Normalización y relación con la lista
+## Normalización y matching con la lista
 
-La primera versión normaliza mayúsculas, diacríticos, puntuación y espacios; elimina términos de
-envase/unidad y aplica alias sencillos (`papas → patata`, `bananas → plátano`, plurales frecuentes).
-Una oferta se relaciona cuando todos los términos relevantes de un elemento de la lista aparecen
-en el producto publicado. La arquitectura permite incorporar después:
+El matcher reutiliza exactamente `normalizeProductName`: minúsculas, diacríticos, puntuación y
+espacios producen una única clave. La tokenización elimina números, unidades y las stop words
+pequeñas `pack`, `unidad(es)`, `marca`, `producto`, `formato`, `aprox` y artículos/preposiciones.
+Aplica sólo equivalencias explícitas y testeadas para plurales frecuentes, patata/papa,
+plátano/banana, `papel wc` y `coca cola/refresco cola`.
 
-1. aliases persistidos y revisados;
-2. categoría compatible;
-3. marca y cantidad de envase;
-4. EAN cuando exista;
-5. puntuación explicable, sin IA externa de pago.
+El score combina preferencia confirmada, igualdad exacta, cobertura de tokens completos,
+especificidad, categoría visual, categoría comercial y preferencia LIDL. Penaliza categorías
+incompatibles, derivados no solicitados (`batido`, `burger`, `croqueta`, `helado`, `salsa`) y
+contradicciones como entera/semi/desnatada, con/sin lactosa, normal/light y natural/azucarado.
+
+- `HIGH` (75 o más): match específico o alias confirmado; sólo se selecciona automáticamente si
+  aventaja al siguiente candidato en al menos 15 puntos.
+- `MEDIUM` (45–74): candidato plausible o ambiguo; se muestra para corrección manual.
+- `LOW` (menos de 45): no se presenta como coincidencia.
+
+La selección manual se guarda en la misma tabla `product_aliases`, aislada por household, nombre
+normalizado y Lidl. Sobrevive a ciclos, Habituales y `CARRY_PENDING`; si el producto deja de estar
+publicado, se descarta como match actual y se generan alternativas. «No relacionar automáticamente»
+guarda una decisión revisable sin ocultar las sugerencias.
+
+El matching considera Lidl para items `LIDL`, `ANY` o sin cadena. Un item que prefiere Mercadona,
+Carrefour o DIA queda fuera: esta fase no cambia elecciones familiares ni implementa un comparador.
+Sólo analiza pendientes y lee D1; nunca consulta Lidl al añadir un item o al abrir la lista.
 
 No se implementa todavía `¿Dónde sale más barato?`: comparar sólo precios observados sin igualar
 envases, vigencia y ámbito de tienda produciría conclusiones incorrectas.
@@ -296,3 +310,21 @@ rechazados y un único `import_run`; el segundo trigger hizo `SKIPPED_TIME`. La 
 `2d8ddce1-3d35-4a7a-b7bd-009ec85a0a9c` registró exactamente ambos Cron. No se forzó una ejecución
 remota fuera de horario: la primera ejecución de producción corresponde al siguiente disparo
 natural de las 05:00 de Madrid.
+
+### Matching Lidl con la lista familiar
+
+La vista real añade primero «Ofertas de tu lista». Un candidato puede conservar simultáneamente su
+precio normal, oferta general y `LOYALTY_PRICE/LIDL_PLUS`; Lidl Plus siempre se muestra como una
+opción condicionada, no como el precio efectivo por defecto. El ahorro se calcula únicamente en
+céntimos respecto a un precio anterior fiable y no se multiplica por cantidad/envase.
+
+Los candidatos `MEDIUM` aparecen bajo «Revisar productos relacionados» con acciones para confirmar
+o no relacionar automáticamente. El resto de promociones vigentes continúa en «Todas las ofertas
+Lidl» y las futuras permanecen en «Próximamente». Si no hay relación, sólo se muestra un mensaje
+discreto y el catálogo normal sigue visible. Los productos ya comprados no se priorizan.
+
+La primera revisión se realizó sobre 20 pares construidos con nombres del catálogo Lidl real
+vigente. Resultado: cero coincidencias absurdas `HIGH`; derivados como leche/batido,
+pollo/croquetas, tomate/salsa y atún/burger quedaron `LOW`, mientras términos genéricos válidos como
+pan/pan bocadillo permanecieron `MEDIUM`. Cantidades, formatos y equivalencia de envases quedan
+deliberadamente fuera de esta versión.

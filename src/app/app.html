@@ -201,10 +201,117 @@
               Un proveedor no respondió; se muestran los demás resultados.
             </div>
           }
-          @if (activeOffers().length > 0) {
-            <div class="section-heading"><h3>Ofertas activas</h3></div>
+          @if (relatedOfferMatches().length > 0) {
+            <div class="section-heading"><h3>🎯 Ofertas de tu lista</h3></div>
+            <div class="match-list">
+              @for (match of relatedOfferMatches(); track match.shoppingItemId) {
+                <article class="match-card">
+                  <div class="match-card-heading">
+                    <h3>
+                      <span aria-hidden="true">{{ categoryDetails(match.category).emoji }}</span>
+                      {{ match.shoppingItemName }}
+                    </h3>
+                    @if (match.dismissed) {
+                      <span>No automático</span>
+                    }
+                  </div>
+                  @for (candidate of match.candidates; track candidate.externalProductId) {
+                    @if (candidateOffer(candidate); as offer) {
+                      <div class="match-candidate">
+                        <div>
+                          <strong>{{ candidate.productName }}</strong>
+                          <span>
+                            {{ candidate.brand || 'Lidl' }} ·
+                            {{ candidate.packageLabel || 'Formato no publicado' }}
+                          </span>
+                          <span>{{ confidenceLabel(candidate.confidence) }}</span>
+                        </div>
+                        <div class="offer-price">
+                          <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
+                          @if (offer.normalPriceCents !== null) {
+                            <span>{{ formatPrice(offer.normalPriceCents) }}</span>
+                          }
+                        </div>
+                        @if (
+                          savingCents(offer.normalPriceCents, offer.offerPriceCents);
+                          as saving
+                        ) {
+                          <p class="saving-note">🔥 Ahorras {{ formatPrice(saving) }}</p>
+                        }
+                        @if (offer.lidlPlusPriceCents !== null) {
+                          <p class="loyalty-note">
+                            Con Lidl Plus: {{ formatPrice(offer.lidlPlusPriceCents) }}
+                          </p>
+                        }
+                        <button
+                          class="secondary-button match-button"
+                          type="button"
+                          [disabled]="store.offersLoading()"
+                          (click)="
+                            store.confirmOfferMatch(
+                              match.shoppingItemId,
+                              candidate.externalProductId
+                            )
+                          "
+                        >
+                          {{ candidate.preferred ? 'Producto habitual' : 'Usar este producto' }}
+                        </button>
+                      </div>
+                    }
+                  }
+                </article>
+              }
+            </div>
+          } @else {
+            <p class="supporting-text">No hay ofertas relacionadas con tu lista ahora mismo.</p>
+          }
+
+          @if (pendingOfferMatches().length > 0) {
+            <details class="match-suggestions">
+              <summary>Revisar productos relacionados</summary>
+              @for (match of pendingOfferMatches(); track match.shoppingItemId) {
+                <div class="match-review-item">
+                  <strong>
+                    <span aria-hidden="true">{{ categoryDetails(match.category).emoji }}</span>
+                    {{ match.shoppingItemName }}
+                  </strong>
+                  <p>¿Es alguno de estos?</p>
+                  @for (candidate of match.candidates; track candidate.externalProductId) {
+                    <button
+                      type="button"
+                      [class.match-choice--selected]="candidate.preferred"
+                      [disabled]="store.offersLoading()"
+                      (click)="
+                        store.confirmOfferMatch(match.shoppingItemId, candidate.externalProductId)
+                      "
+                    >
+                      <span>{{ candidate.productName }}</span>
+                      <small>
+                        {{ candidate.packageLabel || 'Formato no publicado' }} ·
+                        {{ confidenceLabel(candidate.confidence) }}
+                        @if (candidate.currentPriceCents !== null) {
+                          · Precio catálogo {{ formatPrice(candidate.currentPriceCents) }}
+                        }
+                      </small>
+                    </button>
+                  }
+                  <button
+                    class="text-button"
+                    type="button"
+                    [disabled]="store.offersLoading()"
+                    (click)="store.dismissOfferMatch(match.shoppingItemId)"
+                  >
+                    No relacionar automáticamente
+                  </button>
+                </div>
+              }
+            </details>
+          }
+
+          @if (otherActiveOffers().length > 0) {
+            <div class="section-heading"><h3>Todas las ofertas Lidl</h3></div>
             <div class="offer-list">
-              @for (offer of activeOffers(); track offer.id) {
+              @for (offer of otherActiveOffers(); track offer.id) {
                 <article class="offer-card" [class.offer-card--related]="offer.relatedToList">
                   <div class="offer-card-heading">
                     <span>{{ offer.supermarketName }}</span>

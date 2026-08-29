@@ -1,9 +1,12 @@
+import type { ProductCategory } from '../../src/shared/product-category';
+
 export const OFFER_SUPERMARKETS = ['lidl', 'mercadona', 'carrefour', 'dia'] as const;
 
 export type OfferSupermarketId = (typeof OFFER_SUPERMARKETS)[number];
 
 export interface CatalogOffer {
   id: string;
+  externalProductId: string;
   supermarketId: OfferSupermarketId;
   supermarketName: string;
   storeName: string;
@@ -41,4 +44,42 @@ export interface SupermarketProvider {
   listPublishedOffers(): Promise<CatalogOffer[]>;
   getLastSuccessfulUpdate?(): Promise<string | null>;
 }
-import type { ProductCategory } from '../../src/shared/product-category';
+
+export interface ListMatchCandidate {
+  externalProductId: string;
+  productName: string;
+  normalizedProductName: string;
+  brand: string | null;
+  commercialCategory: string | null;
+  visualCategory: ProductCategory;
+  packageLabel: string | null;
+  currentPriceCents: number | null;
+  score: number;
+  confidence: 'HIGH' | 'MEDIUM';
+  reasons: string[];
+  preferred: boolean;
+  activeOffers: CatalogOffer[];
+}
+
+export interface ShoppingItemOfferMatch {
+  shoppingItemId: string;
+  shoppingItemName: string;
+  category: ProductCategory;
+  quantity: string;
+  unit: string;
+  supermarketId: string | null;
+  checked: boolean;
+  dismissed: boolean;
+  automaticMatchExternalProductId: string | null;
+  candidates: ListMatchCandidate[];
+}
+
+export interface ListOfferMatchesResponse {
+  matchedItems: ShoppingItemOfferMatch[];
+  unmatchedItems: {
+    shoppingItemId: string;
+    shoppingItemName: string;
+    reason: 'NO_CANDIDATE' | 'PREFERRED_OTHER_SUPERMARKET' | 'DISMISSED';
+  }[];
+  lastUpdatedAt: string | null;
+}

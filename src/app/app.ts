@@ -6,6 +6,7 @@ import { SwUpdate } from '@angular/service-worker';
 import QRCode from 'qrcode';
 import type {
   OfferSupermarketId,
+  ListMatchCandidate,
   PairingDetails,
   ProductPreference,
   ProductCategory,
@@ -71,6 +72,22 @@ export class App implements OnInit {
   protected readonly upcomingOffers = computed(() =>
     this.store.offers().filter((offer) => offer.upcoming),
   );
+  protected readonly pendingOfferMatches = computed(() =>
+    this.store.offerMatches().filter((match) => !match.checked),
+  );
+  protected readonly relatedOfferMatches = computed(() =>
+    this.pendingOfferMatches().filter((match) =>
+      match.candidates.some((candidate) => candidate.activeOffers.length > 0),
+    ),
+  );
+  protected readonly otherActiveOffers = computed(() => {
+    const relatedOfferIds = new Set(
+      this.relatedOfferMatches().flatMap((match) =>
+        match.candidates.flatMap((candidate) => candidate.activeOffers.map((offer) => offer.id)),
+      ),
+    );
+    return this.activeOffers().filter((offer) => !relatedOfferIds.has(offer.id));
+  });
 
   protected setupAccessKey = '';
   protected householdName = 'Mi hogar';
@@ -274,6 +291,19 @@ export class App implements OnInit {
     return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(
       cents / 100,
     );
+  }
+
+  protected candidateOffer(candidate: ListMatchCandidate) {
+    return candidate.activeOffers[0] ?? null;
+  }
+
+  protected savingCents(normalPriceCents: number | null, offerPriceCents: number): number | null {
+    if (normalPriceCents === null || normalPriceCents <= offerPriceCents) return null;
+    return normalPriceCents - offerPriceCents;
+  }
+
+  protected confidenceLabel(confidence: ListMatchCandidate['confidence']): string {
+    return confidence === 'HIGH' ? 'Coincidencia alta' : 'Sugerencia';
   }
 
   protected formatOfferDate(value: string | null): string {

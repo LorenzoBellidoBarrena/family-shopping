@@ -4,6 +4,7 @@ import type {
   ClearAction,
   CatalogOffer,
   ItemInput,
+  ShoppingItemOfferMatch,
   OfferSupermarketId,
   PairingDetails,
   ProductPreference,
@@ -35,6 +36,8 @@ export class ShoppingStore {
   private readonly habitualProducts = signal<ProductPreference[]>([]);
   private readonly currentSuggestions = signal<ProductPreference[]>([]);
   private readonly currentOffers = signal<CatalogOffer[]>([]);
+  private readonly currentOfferMatches = signal<ShoppingItemOfferMatch[]>([]);
+  private readonly unmatchedOfferItemCountState = signal(0);
   private readonly offersLoadingState = signal(false);
   private readonly offersPartialState = signal(false);
   private readonly offersModeState = signal<'DEMO' | 'REAL'>('DEMO');
@@ -52,6 +55,8 @@ export class ShoppingStore {
   readonly habits = this.habitualProducts.asReadonly();
   readonly suggestions = this.currentSuggestions.asReadonly();
   readonly offers = this.currentOffers.asReadonly();
+  readonly offerMatches = this.currentOfferMatches.asReadonly();
+  readonly unmatchedOfferItemCount = this.unmatchedOfferItemCountState.asReadonly();
   readonly offersLoading = this.offersLoadingState.asReadonly();
   readonly offersPartial = this.offersPartialState.asReadonly();
   readonly offersMode = this.offersModeState.asReadonly();
@@ -163,11 +168,54 @@ export class ShoppingStore {
     this.errorState.set(null);
     this.errorCodeState.set(null);
     try {
-      const result = await this.api.getOffers(supermarket);
+      let matchingFailed = false;
+      const matchingPromise =
+        supermarket === undefined || supermarket === 'lidl'
+          ? this.api.getListOfferMatches().catch(() => {
+              matchingFailed = true;
+              return null;
+            })
+          : Promise.resolve(null);
+      const [result, matching] = await Promise.all([
+        this.api.getOffers(supermarket),
+        matchingPromise,
+      ]);
       this.currentOffers.set(result.offers);
-      this.offersPartialState.set(result.partial);
+      this.currentOfferMatches.set(matching?.matchedItems ?? []);
+      this.unmatchedOfferItemCountState.set(matching?.unmatchedItems.length ?? 0);
+      this.offersPartialState.set(result.partial || matchingFailed);
       this.offersModeState.set(result.mode);
       this.offersLastUpdatedState.set(result.lastUpdatedAt);
+    } catch (error) {
+      this.handleError(error);
+    } finally {
+      this.offersLoadingState.set(false);
+    }
+  }
+
+  async confirmOfferMatch(itemId: string, externalProductId: string): Promise<void> {
+    if (this.offline() || this.offersLoadingState()) return;
+    this.offersLoadingState.set(true);
+    try {
+      await this.api.confirmProductMatch(itemId, externalProductId);
+      const matching = await this.api.getListOfferMatches();
+      this.currentOfferMatches.set(matching.matchedItems);
+      this.unmatchedOfferItemCountState.set(matching.unmatchedItems.length);
+    } catch (error) {
+      this.handleError(error);
+    } finally {
+      this.offersLoadingState.set(false);
+    }
+  }
+
+  async dismissOfferMatch(itemId: string): Promise<void> {
+    if (this.offline() || this.offersLoadingState()) return;
+    this.offersLoadingState.set(true);
+    try {
+      await this.api.dismissProductMatch(itemId);
+      const matching = await this.api.getListOfferMatches();
+      this.currentOfferMatches.set(matching.matchedItems);
+      this.unmatchedOfferItemCountState.set(matching.unmatchedItems.length);
     } catch (error) {
       this.handleError(error);
     } finally {

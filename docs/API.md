@@ -45,13 +45,45 @@ inicializado devuelve `409`, incluso aunque la clave sea correcta.
 | `POST`   | `/api/shopping-cycle/clear`            | Ejecuta `CANCEL`, `CLEAR_ALL` o `CARRY_PENDING`.            |
 | `GET`    | `/api/supermarkets`                    | Supermercados activos ordenados.                            |
 | `GET`    | `/api/offers`                          | Ofertas publicadas, aisladas por proveedor.                 |
+| `GET`    | `/api/offers/for-list`                 | Candidatos Lidl para los pendientes del hogar autenticado.  |
+| `PUT`    | `/api/items/:id/product-match`         | Confirma el producto Lidl preferido para ese nombre.        |
+| `DELETE` | `/api/items/:id/product-match`         | Quita la relación automática aprendida; devuelve `204`.     |
 | `GET`    | `/api/product-preferences/suggestions` | Preferencias por frecuencia y prefijo normalizado.          |
 
 `GET /api/offers?supermarket=lidl|mercadona|carrefour|dia` acepta un filtro opcional. Una caída
 parcial no hace fallar los demás proveedores y devuelve `partial: true`. Cada oferta incluye precio
 en céntimos, vigencia, fuente, requisito de fidelización, coincidencias con la lista y `fixture`.
-En Prompt 6 todos los resultados son fixtures explícitos; `catalogAvailability: PUBLISHED` no
-representa stock real.
+En producción Lidl procede exclusivamente de D1 real; los fixtures quedan aislados en modo demo.
+`catalogAvailability: PUBLISHED` no representa stock real.
+
+## Matching Lidl de la lista
+
+`GET /api/offers/for-list` obtiene el household exclusivamente del device token. No acepta IDs de
+hogar enviados por el cliente y sólo evalúa los items pendientes del ciclo activo. El matching lee
+el último catálogo Lidl válido de D1; nunca hace fetch remoto a Lidl ni bloquea la creación de un
+producto de la lista.
+
+La respuesta separa `matchedItems` y `unmatchedItems`. Cada match contiene el item familiar sin
+modificar, hasta cinco candidatos ordenados, la confianza `HIGH` o `MEDIUM`, las razones del score,
+el precio vigente y todas las ofertas activas del candidato, incluida la oferta general y Lidl Plus
+cuando ambas existen. Un match heurístico sólo se elige automáticamente con confianza `HIGH` y una
+ventaja suficiente sobre el segundo candidato. Los resultados ambiguos permanecen como sugerencias.
+
+`PUT /api/items/:id/product-match` recibe:
+
+```json
+{ "externalProductId": "lidl-product-id" }
+```
+
+La ruta valida que el item pertenece al hogar autenticado, que no prefiere otra cadena y que el
+producto sigue publicado en el catálogo Lidl actual. Guarda la selección por household y nombre
+normalizado, no por ID del item, para que sobreviva a nuevas listas, habituales y
+`CARRY_PENDING`. `DELETE` conserva una preferencia explícita de no seleccionar automáticamente,
+pero permite seguir mostrando candidatos manuales si existen.
+
+Los items con supermercado `LIDL`, `ANY` o sin supermercado pueden considerar Lidl. Una
+preferencia explícita por Mercadona, Carrefour o DIA no se cambia ni se utiliza para sugerir Lidl
+en esta primera versión.
 
 ## Producto
 

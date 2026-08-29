@@ -1,13 +1,35 @@
 # Progreso
 
-## Fase actual: actualización automática diaria de Lidl
+## Fase actual: matching entre lista familiar y ofertas Lidl
 
-Estado: primera importación Lidl controlada en producción completada, validada e idempotente; la
-pestaña Ofertas usa exclusivamente datos reales Lidl. La automatización diaria está configurada
-para las 05:00 de `Europe/Madrid` con guard de horario estacional y quedó desplegada el 29 de
-agosto de 2026.
+Estado: matching determinista, conservador y aprendible implementado sobre el catálogo real Lidl
+persistido en D1. La lista familiar conserva todos sus campos y rendimiento; la relación se calcula
+al abrir Ofertas. La automatización diaria continúa exactamente a las 05:00 de `Europe/Madrid`.
 
 ### Implementado
+
+- `GET /api/offers/for-list` autenticado genera hasta cinco candidatos por item pendiente usando
+  sólo el último catálogo Lidl válido de D1; no hace fetch remoto ni acepta household arbitrario.
+- Scoring explícito con tokens completos, aliases/plurales pequeños, igualdad exacta, categoría
+  visual/comercial, preferencia de supermercado, variantes contradictorias y penalización de
+  productos derivados. `HIGH >= 75`, `MEDIUM >= 45`; `LOW` se descarta.
+- Match heurístico automático sólo cuando es `HIGH` y aventaja al segundo candidato en 15 puntos.
+  Los casos genéricos o ambiguos permanecen `MEDIUM` y requieren selección manual.
+- Migración aditiva `0007_household_product_matches.sql`: amplía `product_aliases` con hogar,
+  supermercado, producto externo, estado confirmado/descartado e índices parciales, conservando
+  aliases previos.
+- Confirmación, corrección y descarte mediante rutas privadas. La preferencia se guarda por hogar y
+  nombre normalizado, sobrevive a ciclos/Habituales/CARRY_PENDING y nunca cambia el shopping item.
+- Catálogo desaparecido: un producto confirmado que ya no aparece en el último import correcto no
+  se devuelve; se reabre la búsqueda de candidatos vigentes.
+- «Ofertas de tu lista» prioriza matches pendientes con promoción, conserva oferta general y Lidl
+  Plus, calcula ahorro en céntimos y deja el resto bajo «Todas las ofertas Lidl». Los candidatos
+  `MEDIUM` aparecen en una revisión manual no bloqueante.
+- Supermercado preferido respetado: `LIDL`, `ANY` y vacío permiten candidatos Lidl; Mercadona,
+  Carrefour o DIA quedan fuera y nunca se sobrescriben.
+- Revisión determinista de 20 pares con nombres del catálogo real: 0 coincidencias absurdas `HIGH`.
+  La lista real actual tiene cinco pendientes y, dado el catálogo vigente, cero matches seguros:
+  Pan mantiene Mercadona y no hay productos actuales de leche, Fanta o ketchup.
 
 - Import automático exclusivo de Lidl mediante dos triggers Cloudflare Cron (`0 3 * * *` y
   `0 4 * * *`). El handler calcula la hora real en `Europe/Madrid`: ejecuta sólo el trigger que
@@ -60,8 +82,8 @@ agosto de 2026.
   automático y sólo Lidl está autorizado en `scheduled()`.
 - Cuatro fixtures de campaña mínimos añadidos (índice, vigente, próxima y malformado); se conservan
   todos los fixtures anteriores y el demo visible continúa aislado.
-- No se creó migración `0007`; la infraestructura existente soporta las ofertas, el lock y la
-  automatización sin alterar el esquema.
+- El import, el lock y la automatización Lidl no requirieron una migración específica; la posterior
+  `0007` pertenece únicamente al aprendizaje de matches familiares.
 
 - `DiaProvider` real separado en discovery, fetch, parse, normalize, validación y persistencia.
 - Discovery estable de `/ofertas` y del localizador oficial de Zafra, sin URLs de campaña fechadas.
@@ -130,10 +152,14 @@ agosto de 2026.
 
 ### Verificación
 
-- 32 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden, caché offline,
-  respuesta optimista y rollback.
-- 73 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import,
-  idempotencia, CET/CEST, DST, skip, lock, stale lock y fallback; 105 pruebas en total.
+- 33 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden, caché offline,
+  respuesta optimista, rollback y confirmación manual de un candidato Lidl.
+- 112 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import,
+  idempotencia, Cron y 40 casos nuevos de matching/API; 145 pruebas en total.
+- Aprendizaje entre ciclos, corrección, descarte, catálogo desaparecido, dos hogares aislados,
+  supermercado `ANY`/LIDL/otro, oferta general + Lidl Plus y endpoint sin autenticar cubiertos.
+- Revisión de falsos positivos con 20 pares del catálogo real: 20/20 correctos y ningún `HIGH`
+  absurdo.
 - Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.
@@ -156,6 +182,17 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
 - Automatización diaria Lidl desplegada el 29 de agosto de 2026 en la versión
   `2d8ddce1-3d35-4a7a-b7bd-009ec85a0a9c`. Cloudflare confirmó los triggers `0 3 * * *` y
   `0 4 * * *`; `SUPERMARKET_FEATURE_ENABLED=true` y no se añadió ninguna migración.
+- Matching Lidl desplegado el 30 de agosto de 2026 en la versión
+  `db98cb3b-2491-48d6-9e81-96c223f5eb20`. `0007_household_product_matches.sql` quedó aplicada
+  remotamente sin migraciones pendientes. Shell y `/pair` responden `200`, salud `200`, API
+  desconocida JSON `404`, matching/ofertas sin token `401` y `/ws` sin upgrade `426`; manifest y
+  service worker responden `200`.
+- El bundle publicado contiene «Ofertas de tu lista» y «Revisar productos relacionados».
+  `SUPERMARKET_FEATURE_ENABLED=true`; Cloudflare conserva exactamente `0 3 * * *` y `0 4 * * *`.
+- Smoke D1 posterior: 1 hogar, 2 dispositivos, 1 ciclo activo, 5 items, 5 preferencias y 53
+  productos Lidl, idénticos al checkpoint previo. Los cinco items están pendientes; el catálogo
+  actual produce 0 matches/0 con oferta/5 unmatched: sólo existe `Pan bocadillo`, pero Pan conserva
+  Mercadona, y `empanada`/`pañuelos` no coinciden por substring.
 - Smoke posterior al Cron: shell y `/pair` `200`, salud `200`, API desconocida `404`, ofertas sin
   token `401` y `/ws` sin upgrade `426`. Los conteos familiares permanecieron en 1 hogar, 2
   dispositivos, 1 ciclo activo, 5 items y 5 preferencias. El catálogo remoto siguió en 53

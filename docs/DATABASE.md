@@ -2,8 +2,9 @@
 
 Las migraciones son `0001_initial_schema.sql`, `0002_realtime_revisions.sql`,
 `0003_supermarket_catalog.sql`, `0004_product_categories.sql`,
-`0005_carrefour_import_foundation.sql` y `0006_nullable_offer_validity.sql`. Se validan con el
-runtime de pruebas oficial de Workers y D1 local.
+`0005_carrefour_import_foundation.sql`, `0006_nullable_offer_validity.sql` y
+`0007_household_product_matches.sql`. Se validan con el runtime de pruebas oficial de Workers y D1
+local.
 
 ## Tablas
 
@@ -19,7 +20,7 @@ runtime de pruebas oficial de Workers y D1 local.
 - `household_revisions`: secuencia creciente de eventos de sincronización por hogar.
 - `stores`: establecimientos o ámbitos comerciales, con geolocalización opcional.
 - `external_products`: catálogo publicado por cadena, EAN opcional y última observación.
-- `product_aliases`: equivalencias normalizadas revisables.
+- `product_aliases`: equivalencias léxicas globales y matches Lidl aprendidos aislados por hogar.
 - `store_products`: relación de publicación producto/tienda; no representa stock.
 - `product_prices`: histórico de precios en céntimos enteros.
 - `offers`: promociones, vigencia, fuente y requisito de tarjeta en céntimos enteros.
@@ -73,7 +74,7 @@ columnas específicas de DIA.
 ## Importación Lidl
 
 Lidl reutiliza sin cambios `stores`, `external_products`, `store_products`, `product_prices`,
-`offers` e `import_runs`; no se ha creado una migración `0007`. El localizador oficial permite
+`offers` e `import_runs`; su importación no requirió un esquema específico. El localizador oficial permite
 guardar la tienda de Zafra mediante el slug canónico público porque la página no expone un número de
 tienda. Las coordenadas sólo se guardan porque aparecen explícitamente en su JSON-LD.
 
@@ -81,8 +82,22 @@ El catálogo lógico `campaign-region-badajoz` representa fichas de campaña cuy
 explícitamente Badajoz con el bloque de precio usado. Su scope es `REGIONAL`, nunca stock ni precio
 confirmado de la tienda de Zafra. Un producto puede tener simultáneamente una oferta general y otra
 `LOYALTY_PRICE/LIDL_PLUS`; la tabla `offers` existente ya admite ambas mediante filas distintas, por
-lo que no se creó migración `0007`. El histórico de `product_prices` sigue añadiendo snapshot sólo
+lo que no se creó una migración de proveedor. El histórico de `product_prices` sigue añadiendo snapshot sólo
 cuando cambia el precio.
+
+## Matching familiar con catálogo
+
+`0007_household_product_matches.sql` amplía de forma conservadora `product_aliases`; no crea una
+tabla paralela. Conserva y copia los aliases globales existentes, y añade `household_id`,
+`supermarket_id`, `external_product_id`, `match_status` (`CONFIRMED` o `DISMISSED`) y
+`updated_at`. La clave parcial `(household_id, normalized_alias, supermarket_id)` impide mezclar
+preferencias entre hogares. El producto externo usa `ON DELETE SET NULL`: si desaparece del
+catálogo no se rompe la preferencia ni el ciclo familiar y el matcher puede volver a generar
+candidatos.
+
+La relación se guarda por hogar y nombre normalizado, no por `shopping_item_id`. Por ello sobrevive
+a una lista nueva, a Habituales y a `CARRY_PENDING`. Los aliases léxicos globales mantienen su
+índice único parcial independiente y siguen sin pertenecer a un hogar.
 
 ## Atomicidad
 
@@ -100,7 +115,7 @@ ordenar y deduplicar avisos; nunca sustituye la lectura canónica del ciclo acti
 npm run db:setup:local
 ```
 
-El seed `database/seeds/0001_supermarkets.sql` es idempotente. Las migraciones `0003`, `0004` y
-`0005` están aplicadas local y remotamente. `0006` sólo está aplicada en D1 local en esta tarea; no
-se ha desplegado ni aplicado remotamente. Lidl no requiere `0007`. Los fixtures viven sólo en
-código/pruebas y nunca se cargan mediante una migración.
+El seed `database/seeds/0001_supermarkets.sql` es idempotente. Las migraciones `0001`–`0007` están
+aplicadas local y remotamente. `0007` añade exclusivamente la persistencia de matching familiar;
+no altera items, ciclos, ofertas, precios ni imports. Los fixtures viven sólo en código/pruebas y
+nunca se cargan mediante una migración.

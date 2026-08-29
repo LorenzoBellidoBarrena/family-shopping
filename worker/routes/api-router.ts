@@ -1,5 +1,5 @@
 import type { Env } from '../env';
-import { notFound } from '../errors';
+import { badRequest, notFound } from '../errors';
 import { jsonResponse, methodNotAllowed } from '../http';
 import { D1Repository } from '../repositories/d1-repository';
 import { AuthService } from '../services/auth-service';
@@ -9,11 +9,18 @@ import { OffersService } from '../services/offers-service';
 import { LidlD1OffersProvider } from '../providers/lidl-d1-offers-provider';
 import { readJsonObject } from '../validation';
 import { routeAdminImports } from './admin-import-router';
+import { ProductMatchRepository } from '../repositories/product-match-repository';
+import { ListOfferMatchingService } from '../services/list-offer-matching-service';
 
 const itemMatch = (pathname: string): { itemId: string; toggle: boolean } | null => {
   const match = /^\/api\/items\/([^/]+)(\/toggle)?$/u.exec(pathname);
   if (!match) return null;
   return { itemId: decodeURIComponent(match[1]), toggle: match[2] === '/toggle' };
+};
+
+const productMatch = (pathname: string): { itemId: string } | null => {
+  const match = /^\/api\/items\/([^/]+)\/product-match$/u.exec(pathname);
+  return match ? { itemId: decodeURIComponent(match[1]) } : null;
 };
 
 export const routeApi = async (
@@ -30,6 +37,11 @@ export const routeApi = async (
     env.SUPERMARKET_FEATURE_ENABLED === 'true'
       ? new OffersService(repository, [new LidlD1OffersProvider(env.DB)], 'REAL')
       : new OffersService(repository);
+  const listMatching = new ListOfferMatchingService(
+    repository,
+    new ProductMatchRepository(env.DB),
+    new LidlD1OffersProvider(env.DB),
+  );
 
   if (url.pathname === '/api/health') {
     return request.method === 'GET' ? jsonResponse({ status: 'ok' }) : methodNotAllowed(['GET']);
@@ -50,8 +62,10 @@ export const routeApi = async (
   }
 
   const matchedItem = itemMatch(url.pathname);
+  const matchedProductPreference = productMatch(url.pathname);
   const knownPrivatePath =
     matchedItem !== null ||
+    matchedProductPreference !== null ||
     url.pathname === '/api/pairings' ||
     url.pathname === '/api/shopping-cycle/active' ||
     url.pathname === '/api/shopping-cycle/complete' ||
@@ -59,6 +73,7 @@ export const routeApi = async (
     url.pathname === '/api/items' ||
     url.pathname === '/api/supermarkets' ||
     url.pathname === '/api/offers' ||
+    url.pathname === '/api/offers/for-list' ||
     url.pathname === '/api/product-preferences/suggestions';
   if (!knownPrivatePath) throw notFound('La ruta solicitada no existe.');
 
@@ -95,6 +110,30 @@ export const routeApi = async (
     return jsonResponse({ item }, 201);
   }
 
+  if (matchedProductPreference) {
+    if (request.method === 'PUT') {
+      const body = await readJsonObject(request);
+      const externalProductId = body['externalProductId'];
+      if (
+        typeof externalProductId !== 'string' ||
+        externalProductId.length < 1 ||
+        externalProductId.length > 100
+      ) {
+        throw badRequest(
+          'INVALID_EXTERNAL_PRODUCT',
+          'externalProductId debe identificar un producto publicado.',
+        );
+      }
+      await listMatching.confirm(device, matchedProductPreference.itemId, externalProductId);
+      return jsonResponse({ saved: true });
+    }
+    if (request.method === 'DELETE') {
+      await listMatching.dismiss(device, matchedProductPreference.itemId);
+      return new Response(null, { status: 204 });
+    }
+    return methodNotAllowed(['PUT', 'DELETE']);
+  }
+
   if (matchedItem) {
     if (matchedItem.toggle) {
       if (request.method !== 'POST') return methodNotAllowed(['POST']);
@@ -127,6 +166,11 @@ export const routeApi = async (
   if (url.pathname === '/api/offers') {
     if (request.method !== 'GET') return methodNotAllowed(['GET']);
     return jsonResponse(await offers.list(device, url));
+  }
+
+  if (url.pathname === '/api/offers/for-list') {
+    if (request.method !== 'GET') return methodNotAllowed(['GET']);
+    return jsonResponse(await listMatching.list(device));
   }
 
   if (url.pathname === '/api/product-preferences/suggestions') {

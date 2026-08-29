@@ -8,6 +8,7 @@ import type {
   CatalogOffer,
   ClearAction,
   ItemInput,
+  ListOfferMatchesResponse,
   OfferSupermarketId,
   OffersResponse,
   PairingConsumeInput,
@@ -88,6 +89,7 @@ class FakeShoppingApi {
   readonly offerData: CatalogOffer[] = [
     {
       id: 'lidl-milk',
+      externalProductId: 'product-lidl-milk',
       supermarketId: 'lidl',
       supermarketName: 'Lidl',
       storeName: 'Lidl Zafra',
@@ -131,6 +133,42 @@ class FakeShoppingApi {
     mode: this.offersMode,
     lastUpdatedAt: '2026-08-28T00:00:00.000Z',
   }));
+  readonly getListOfferMatches = vi.fn(async (): Promise<ListOfferMatchesResponse> => ({
+    matchedItems: [
+      {
+        shoppingItemId: 'milk',
+        shoppingItemName: 'Leche',
+        category: 'DAIRY',
+        quantity: '6',
+        unit: 'unidad',
+        supermarketId: 'lidl',
+        checked: false,
+        dismissed: false,
+        automaticMatchExternalProductId: null,
+        candidates: [
+          {
+            externalProductId: 'product-lidl-milk',
+            productName: 'Leche entera 1 litro',
+            normalizedProductName: 'leche entera 1 litro',
+            brand: 'Fixture Lidl',
+            commercialCategory: 'Lácteos',
+            visualCategory: 'DAIRY',
+            packageLabel: '1 l',
+            currentPriceCents: 105,
+            score: 65,
+            confidence: 'MEDIUM',
+            reasons: ['ALL_TOKENS_PRESENT', 'SAME_VISUAL_CATEGORY'],
+            preferred: false,
+            activeOffers: this.offerData,
+          },
+        ],
+      },
+    ],
+    unmatchedItems: [],
+    lastUpdatedAt: '2026-08-28T00:00:00.000Z',
+  }));
+  readonly confirmProductMatch = vi.fn(async () => undefined);
+  readonly dismissProductMatch = vi.fn(async () => undefined);
   readonly bootstrap = vi.fn(async (input: BootstrapInput): Promise<BootstrapResponse> => {
     void input;
     return {
@@ -401,20 +439,32 @@ describe('Shopping list interface', () => {
     expect(fixture.nativeElement.textContent).toContain('No se pudo guardar');
   });
 
-  it('shows offer fixtures, highlights list matches, and filters by supermarket', async () => {
+  it('shows related list offers separately and filters by supermarket', async () => {
     button('％ Ofertas').click();
     await settle();
 
-    const card = fixture.nativeElement.querySelector('.offer-card') as HTMLElement;
+    const card = fixture.nativeElement.querySelector('.match-card') as HTMLElement;
     expect(api.getOffers).toHaveBeenCalledWith(undefined);
     expect(card.textContent).toContain('Leche entera 1 litro');
-    expect(card.textContent).toContain('Está en tu lista');
-    expect(card.textContent).toContain('disponibilidad no confirmada');
+    expect(card.textContent).toContain('Leche');
+    expect(card.textContent).toContain('Ahorras');
 
     button('DIA').click();
     await settle();
     expect(api.getOffers).toHaveBeenLastCalledWith('dia');
     expect(fixture.nativeElement.querySelectorAll('.offer-card')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelectorAll('.match-card')).toHaveLength(0);
+  });
+
+  it('allows a suggested Lidl product to be confirmed without changing the list item', async () => {
+    button('％ Ofertas').click();
+    await settle();
+
+    button('Usar este producto').click();
+    await settle();
+
+    expect(api.confirmProductMatch).toHaveBeenCalledWith('milk', 'product-lidl-milk');
+    expect(api.serverCycle.items[0].name).toBe('Leche');
   });
 
   it('labels real Lidl data as Badajoz and never as demo', async () => {

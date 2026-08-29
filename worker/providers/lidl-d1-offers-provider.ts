@@ -79,6 +79,7 @@ export class LidlD1OffersProvider implements SupermarketProvider {
       }
       grouped.set(key, {
         id: key,
+        externalProductId: row.product_id,
         supermarketId: 'lidl',
         supermarketName: 'Lidl',
         storeName: 'Ámbito regional',

@@ -44,6 +44,10 @@ El store reemplaza items en su índice actual al marcar o editar, por lo que nun
 - `durable-objects/household-coordinator.ts`: Hibernation API y broadcast por hogar.
 - `services/realtime-publisher.ts`: incrementa la revisión tras persistir y publica el evento.
 - `services/offers-service.ts`: agrega proveedores con tolerancia a fallos y relaciona ofertas.
+- `services/list-offer-matching-service.ts`: genera candidatos Lidl desde D1, aplica preferencias y
+  separa sugerencia de match automático.
+- `services/product-matching.ts`: tokenización, aliases, contradicciones y scoring puro/explicable.
+- `repositories/product-match-repository.ts`: catálogo actual en bloque y preferencias por hogar.
 - `providers/*-provider.ts`: adaptadores independientes de Lidl, Mercadona, Carrefour y DIA.
 - `domain/supermarkets.ts`: contrato `SupermarketProvider` y tipos de catálogo independientes.
 - `domain/supermarket-import.ts`: contrato real de discovery, fetch, parsing y normalización.
@@ -62,6 +66,32 @@ El store reemplaza items en su índice actual al marcar o editar, por lo que nun
 `Promise.allSettled`, de modo que un fallo sólo marca la respuesta como parcial. En modo real lee
 el catálogo Lidl persistido y calcula la fecha visible desde el último `import_runs.SUCCESS`; los
 fixtures demo permanecen aislados y no se mezclan con datos reales.
+
+`GET /api/offers/for-list` es otra lectura privada, también independiente del flujo de compra. Lee
+en paralelo ciclo, catálogo Lidl vigente, aliases del hogar, ofertas persistidas y último import
+correcto. No hace N+1 por item y nunca consulta Internet. Crear, editar o marcar un item continúa
+teniendo la misma latencia y semántica; el matching se solicita sólo al abrir o actualizar Ofertas.
+
+## Matching de intención familiar
+
+El item conserva su nombre, cantidad, unidad, supermercado, categoría, estado y `sort_order`. El
+matcher crea una vista adicional: intención normalizada → candidatos comerciales → score →
+confianza. Reutiliza `normalizeProductName`, compara tokens completos, elimina sólo stop words de
+formato, aplica un diccionario corto de singular/plural y sinónimos, penaliza variantes
+contradictorias y utiliza `ProductCategory` únicamente como evidencia. Compartir categoría nunca
+basta para relacionar, por ejemplo, leche con queso.
+
+Una preferencia `CONFIRMED` obtiene prioridad máxima y se guarda en `product_aliases` por
+household, nombre normalizado y supermercado. Una preferencia `DISMISSED` impide la selección
+automática pero no oculta posibles correcciones manuales. Si el producto confirmado deja de estar
+en el último catálogo publicado, se omite y se reabre la generación de candidatos. Sólo `HIGH` con
+una ventaja mínima frente al segundo candidato se elige heurísticamente; `MEDIUM` se presenta como
+«¿Es alguno de estos?» y `LOW` se descarta.
+
+La UI abre con «Ofertas de tu lista», prioriza pendientes con oferta activa y conserva juntas las
+filas general y Lidl Plus de un mismo producto. A continuación muestra candidatos que requieren
+revisión, luego el resto de ofertas Lidl y finalmente las próximas. Una selección manual aprende
+para ciclos futuros; quitarla no modifica nunca el shopping item.
 
 D1 es la fuente persistente de verdad. Los cierres, la creación del siguiente ciclo y el copiado de
 pendientes se confirman en un único `D1.batch`. El Durable Object no guarda una copia del dominio:
@@ -92,10 +122,10 @@ en `product_preferences`, reglas locales por palabras completas y `OTHER`. Una c
 explícitamente representa una elección de usuario y se guarda también en la preferencia. No existe
 una fuente externa ni un modelo de IA.
 
-La columna libre `category` de `external_products` y `product_aliases` pertenece a la taxonomía
-comercial de cada proveedor. Se mantiene separada para no degradar una jerarquía futura más
-detallada. Si se incorporan catálogos reales se añadirá un mapping explícito hacia
-`ProductCategory`; el matching actual no cambia.
+La columna libre `category` de `external_products` pertenece a la taxonomía comercial de cada
+proveedor. Se mantiene separada para no degradar una jerarquía futura más detallada. El catálogo
+real añade `visual_category` mediante mapping explícito y el matching puede usar ambas como señales,
+sin reemplazar ninguna taxonomía ni tratarlas como identidad suficiente.
 
 Los eventos de item ya transportaban el item completo, por lo que `category` viaja en
 `ITEM_CREATED` y `ITEM_UPDATED` sin versionar de nuevo el protocolo. El cliente sigue usando el
