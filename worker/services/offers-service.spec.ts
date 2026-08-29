@@ -58,6 +58,26 @@ describe('offers providers and product matching', () => {
     expect(result.offers.every((offer: CatalogOffer) => offer.supermarketId === 'lidl')).toBe(true);
   });
 
+  it('reports freshness from the last successful import instead of a failed attempt', async () => {
+    const lastSuccessfulUpdate = '2026-08-28T05:00:10.000Z';
+    const provider = new LidlFixtureProvider() as LidlFixtureProvider & SupermarketProvider;
+    provider.getLastSuccessfulUpdate = async () => lastSuccessfulUpdate;
+    const service = new OffersService({ getActiveCycle: async () => cycle }, [provider], 'REAL');
+
+    const result = await service.list(
+      {
+        id: 'device-1',
+        householdId: 'household-1',
+        name: null,
+        createdAt: cycle.createdAt,
+        lastSeenAt: cycle.createdAt,
+      },
+      new URL('https://example.test/api/offers'),
+    );
+
+    expect(result.lastUpdatedAt).toBe(lastSuccessfulUpdate);
+  });
+
   it('matches aliases without relying only on exact strings', () => {
     expect(productsMatch('Huevos', 'Huevos frescos docena')).toBe(true);
     expect(productsMatch('Papas', 'Patata para freír 2 kg')).toBe(true);

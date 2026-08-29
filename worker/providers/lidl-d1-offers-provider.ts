@@ -108,4 +108,15 @@ export class LidlD1OffersProvider implements SupermarketProvider {
     }
     return [...grouped.values()];
   }
+
+  async getLastSuccessfulUpdate(): Promise<string | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT finished_at FROM import_runs
+         WHERE provider = 'lidl' AND status = 'SUCCESS' AND finished_at IS NOT NULL
+         ORDER BY finished_at DESC, started_at DESC LIMIT 1`,
+      )
+      .first<{ finished_at: string }>();
+    return row?.finished_at ?? null;
+  }
 }

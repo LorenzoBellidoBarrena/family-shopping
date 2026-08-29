@@ -187,12 +187,13 @@ con fixtures sean correctos.
 
 - `IMPORT_ADMIN_KEY` es independiente del device token y está configurado como secret en producción.
 - `SUPERMARKET_FEATURE_ENABLED=true` activa sólo la lectura de ofertas reales persistidas.
-- Máximo 20 fichas por petición administrativa, 8 segundos y 2 MiB por respuesta.
+- Las peticiones administrativas mantienen su límite explícito; el scheduled Lidl usa un límite
+  prudente de 100 productos para cubrir las campañas publicadas sin ampliar el crawling.
 - Allowlist estricta evita SSRF y se vuelve a validar la URL tras redirects.
 - Un producto inválido produce `PARTIAL`; discovery bloqueado produce `FAILED` sin stack trace.
 - Precio histórico sólo se inserta cuando cambia; producto y oferta usan upsert idempotente.
-- `scheduled()` está preparado, pero `crons: []`. Cloudflare Cron usa UTC; no se fija todavía una
-  hora para evitar errores con el horario Europe/Madrid.
+- `IMPORT_ADMIN_KEY` continúa siendo obligatorio para imports HTTP manuales; el Cron interno llama
+  directamente al servicio y no expone ni registra ese secret.
 
 ## Implementación y validación de campañas Lidl
 
@@ -264,4 +265,34 @@ productos y una futura. `LidlD1OffersProvider` devuelve sólo datos persistidos 
 oferta general y Lidl Plus y marca las fechas futuras como `upcoming`. El scope lógico se presenta
 como Badajoz y nunca como establecimiento físico de Zafra. El modo real está activo mediante
 `SUPERMARKET_FEATURE_ENABLED=true`; el import administrativo conserva su gate independiente por
-secret y `crons: []` sigue desactivado.
+secret.
+
+### Automatización diaria Lidl
+
+Lidl es el único proveedor autorizado en el handler `scheduled`. Wrangler registra exactamente
+`0 3 * * *` y `0 4 * * *`; Cloudflare los dispara en UTC y el Worker convierte
+`controller.scheduledTime` con `Europe/Madrid`. A las 03:00 UTC ejecuta en CEST y omite en CET; a
+las 04:00 UTC omite en CEST y ejecuta en CET. En ambos casos el objetivo es una única ejecución a
+las 05:00 locales, incluidos los días de transición DST, sin fechas estacionales hardcodeadas.
+
+El trigger omitido sólo genera un log seguro `SKIPPED_TIME`. Un import Lidl `RUNNING` con menos de
+15 minutos genera `SKIPPED_ALREADY_RUNNING`; uno más antiguo se marca
+`FAILED/IMPORT_STALE`. El scheduled usa el mismo servicio e idempotencia que el endpoint manual,
+pero no pasa por HTTP ni utiliza `IMPORT_ADMIN_KEY`.
+
+Discovery, parsing y normalización del provider validado no cambian. El lote se mantiene en memoria
+hasta superar las validaciones de producto/precio. Cero productos produce
+`LIDL_NO_VALID_PRODUCT`; una caída extrema respecto al último `SUCCESS` produce
+`LIDL_SUSPICIOUS_PRODUCT_DROP`. Ninguno borra productos, precios u ofertas anteriores. La UI sigue
+filtrando vigencia y separando próximas ofertas, y su «Última actualización» usa el último
+`finished_at` con estado `SUCCESS`, por lo que un intento fallido no aparenta datos nuevos.
+
+No se añadió migración para esta automatización. DIA, Carrefour y Mercadona continúan excluidos del
+Cron; no hay alertas automáticas ni comparador en esta fase.
+
+El 29 de agosto de 2026 Wrangler confirmó una ejecución controlada con hora CEST inyectada contra
+D1 local y la fuente Lidl real: `SUCCESS`, 53 productos, 53 precios, 84 ofertas, 42 Lidl Plus, cero
+rechazados y un único `import_run`; el segundo trigger hizo `SKIPPED_TIME`. La versión de producción
+`2d8ddce1-3d35-4a7a-b7bd-009ec85a0a9c` registró exactamente ambos Cron. No se forzó una ejecución
+remota fuera de horario: la primera ejecución de producción corresponde al siguiente disparo
+natural de las 05:00 de Madrid.

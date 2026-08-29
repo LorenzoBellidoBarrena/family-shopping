@@ -39,5 +39,6 @@ export interface PresentedOffer extends CatalogOffer {
 export interface SupermarketProvider {
   readonly supermarketId: OfferSupermarketId;
   listPublishedOffers(): Promise<CatalogOffer[]>;
+  getLastSuccessfulUpdate?(): Promise<string | null>;
 }
 import type { ProductCategory } from '../../src/shared/product-category';

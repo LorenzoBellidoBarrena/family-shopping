@@ -52,13 +52,16 @@ El store reemplaza items en su índice actual al marcar o editar, por lo que nun
 - `providers/lidl-provider.ts`: discovery oficial de campañas/tienda, fetch allowlisted y parser del
   JSON estructurado de fichas con precio regional Badajoz; `lidl-fixture-provider.ts` mantiene
   separada la demostración de la pestaña Ofertas.
-- `services/supermarket-import-service.ts`: orquestación tolerante a errores y métricas parciales.
+- `services/supermarket-import-service.ts`: orquestación tolerante a errores, staging previo a
+  persistencia, sanity checks y lock Lidl contra ejecuciones solapadas.
 - `repositories/supermarket-import-repository.ts`: persistencia D1 e idempotencia de snapshots.
+- `scheduled/lidl-schedule.ts`: guard `Europe/Madrid` para ejecutar Lidl una vez al día a las 05:00
+  locales a partir de dos triggers UTC.
 
 `GET /api/offers` forma una rama independiente del dominio de lista. Consulta proveedores con
-`Promise.allSettled`, de modo que un fallo sólo marca la respuesta como parcial. El esquema D1 está
-preparado para persistencia futura, pero en Prompt 6 los adaptadores devuelven únicamente fixtures
-explícitos y no realizan solicitudes a webs de supermercados.
+`Promise.allSettled`, de modo que un fallo sólo marca la respuesta como parcial. En modo real lee
+el catálogo Lidl persistido y calcula la fecha visible desde el último `import_runs.SUCCESS`; los
+fixtures demo permanecen aislados y no se mezclan con datos reales.
 
 D1 es la fuente persistente de verdad. Los cierres, la creación del siguiente ciclo y el copiado de
 pendientes se confirman en un único `D1.batch`. El Durable Object no guarda una copia del dominio:
@@ -70,8 +73,15 @@ las rutas de lista, pairing ni el Durable Object. Sólo acepta hosts y rutas Car
 limita URLs descubiertas, tiempo y tamaño de respuesta, valida datos en runtime y persiste SQL
 parametrizado. Lidl añade la allowlist cerrada de campañas en `www.lidl.es` y conserva
 `endpoints.leaflets.schwarz` sólo para metadata del visor oficial, sin dar acceso a URLs
-proporcionadas por el usuario. Existe handler `scheduled`, pero
-`triggers.crons` está vacío y el feature flag está desactivado.
+proporcionadas por el usuario. El handler `scheduled` invoca directamente el importador Lidl. Los
+triggers `0 3 * * *` y `0 4 * * *` cubren CET y CEST, mientras un guard con timezone
+`Europe/Madrid` permite ejecutar únicamente cuando la hora local es 05:00. El trigger no válido se
+omite sin crear un run. Carrefour, DIA y Mercadona no forman parte del scheduled.
+
+Antes de persistir Lidl, el importador prepara y valida todo el lote. Un resultado vacío o una caída
+extrema se registra como fallo y deja intacto el último dataset válido. Un `RUNNING` reciente actúa
+como lock durante 15 minutos; los locks antiguos se cierran como stale. El histórico de precios
+sigue insertando una fila sólo cuando cambia el precio y las ofertas antiguas no se eliminan.
 
 ## Categoría visual de producto
 

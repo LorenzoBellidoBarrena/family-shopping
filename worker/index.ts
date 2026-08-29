@@ -5,6 +5,7 @@ import { routeWebSocket } from './routes/websocket-router';
 import { withSecurityHeaders } from './security/response-headers';
 import { SupermarketImportRepository } from './repositories/supermarket-import-repository';
 import { SupermarketImportService } from './services/supermarket-import-service';
+import { runScheduledLidlImport } from './scheduled/lidl-schedule';
 
 export { HouseholdCoordinator } from './durable-objects/household-coordinator';
 export type { Env } from './env';
@@ -31,10 +32,10 @@ export const worker: ExportedHandler<Env> = {
 
     return withSecurityHeaders(request, await env.ASSETS.fetch(request));
   },
-  async scheduled(_controller, env, context) {
+  scheduled(controller, env, context) {
     if (env.SUPERMARKET_FEATURE_ENABLED !== 'true') return;
     const service = new SupermarketImportService(new SupermarketImportRepository(env.DB));
-    context.waitUntil(service.importCarrefour(20));
+    context.waitUntil(runScheduledLidlImport(controller.scheduledTime, service));
   },
 };
 

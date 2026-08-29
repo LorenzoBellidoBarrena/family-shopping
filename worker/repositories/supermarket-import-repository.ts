@@ -52,6 +52,34 @@ export class SupermarketImportRepository {
       .run();
   }
 
+  async startRunIfAvailable(
+    id: string,
+    providerId: ProviderId,
+    now: string,
+    activeAfter: string,
+  ): Promise<boolean> {
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `UPDATE import_runs
+           SET finished_at = ?, status = 'FAILED', error_code = 'IMPORT_STALE'
+           WHERE provider = ? AND status = 'RUNNING' AND started_at < ?`,
+        )
+        .bind(now, providerId, activeAfter),
+      this.db
+        .prepare(
+          `INSERT INTO import_runs (id, provider, started_at, status)
+           SELECT ?, ?, ?, 'RUNNING'
+           WHERE NOT EXISTS (
+             SELECT 1 FROM import_runs
+             WHERE provider = ? AND status = 'RUNNING' AND started_at >= ?
+           )`,
+        )
+        .bind(id, providerId, now, providerId, activeAfter),
+    ]);
+    return (results[1]?.meta.changes ?? 0) > 0;
+  }
+
   async finishRun(
     id: string,
     input: {
@@ -97,6 +125,20 @@ export class SupermarketImportRepository {
       .bind(limit)
       .all<ImportRunRow>();
     return results.map(mapRun);
+  }
+
+  async getLastSuccessfulRun(providerId: ProviderId): Promise<ImportRun | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT id, provider, started_at, finished_at, status, products_seen, prices_seen,
+                offers_seen, rejected_items, error_code
+         FROM import_runs
+         WHERE provider = ? AND status = 'SUCCESS'
+         ORDER BY finished_at DESC, started_at DESC LIMIT 1`,
+      )
+      .bind(providerId)
+      .first<ImportRunRow>();
+    return row ? mapRun(row) : null;
   }
 
   async listActiveOffers(date: string): Promise<{ id: string; productId: string }[]> {

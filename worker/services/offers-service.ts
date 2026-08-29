@@ -47,9 +47,12 @@ export class OffersService {
     const selected = supermarket
       ? this.providers.filter((provider) => provider.supermarketId === supermarket)
       : this.providers;
-    const [cycle, providerResults] = await Promise.all([
+    const [cycle, providerResults, updateResults] = await Promise.all([
       this.repository.getActiveCycle(device.householdId),
       Promise.allSettled(selected.map((provider) => provider.listPublishedOffers())),
+      Promise.allSettled(
+        selected.map((provider) => provider.getLastSuccessfulUpdate?.() ?? Promise.resolve(null)),
+      ),
     ]);
     const offers = providerResults.flatMap((result) =>
       result.status === 'fulfilled' ? result.value : [],
@@ -73,15 +76,24 @@ export class OffersService {
             ? -1
             : 1,
       );
+    const successfulUpdates = updateResults.flatMap((result) =>
+      result.status === 'fulfilled' && result.value ? [result.value] : [],
+    );
+    const hasExplicitFreshness = selected.some(
+      (provider) => provider.getLastSuccessfulUpdate !== undefined,
+    );
     return {
       offers: presented,
-      partial: providerResults.some((result) => result.status === 'rejected'),
+      partial:
+        providerResults.some((result) => result.status === 'rejected') ||
+        updateResults.some((result) => result.status === 'rejected'),
       mode: this.mode,
-      lastUpdatedAt:
-        presented
-          .map((offer) => offer.observedAt)
-          .sort()
-          .at(-1) ?? null,
+      lastUpdatedAt: hasExplicitFreshness
+        ? (successfulUpdates.sort().at(-1) ?? null)
+        : (presented
+            .map((offer) => offer.observedAt)
+            .sort()
+            .at(-1) ?? null),
     };
   }
 }

@@ -19,6 +19,7 @@ import { DiaProvider } from '../providers/dia-provider';
 import { LidlProvider } from '../providers/lidl-provider';
 import { LidlD1OffersProvider } from '../providers/lidl-d1-offers-provider';
 import { SupermarketImportRepository } from '../repositories/supermarket-import-repository';
+import { runScheduledLidlImport } from '../scheduled/lidl-schedule';
 import { SupermarketImportService } from './supermarket-import-service';
 
 interface TestEnv {
@@ -64,6 +65,40 @@ class FixtureCarrefourProvider implements SupermarketImportProvider {
 
   normalize(product: ParsedCarrefourProduct) {
     return this.parser.normalize(product);
+  }
+}
+
+const lidlFetcher = async (input: RequestInfo | URL): Promise<Response> => {
+  const url = input.toString();
+  const body = url.includes('/tiendas/')
+    ? lidlStore
+    : url === 'https://www.lidl.es/'
+      ? lidlCampaignIndex
+      : url.includes('/ofertas-proxima-semana/')
+        ? lidlCampaignNext
+        : lidlCampaignCurrent;
+  return new Response(body, { status: 200 });
+};
+
+class SingleProductLidlProvider implements SupermarketImportProvider {
+  readonly providerId = 'lidl' as const;
+  private readonly delegate = new LidlProvider(lidlFetcher);
+  readonly catalogStore = this.delegate.catalogStore;
+
+  async discover(): Promise<string[]> {
+    return (await this.delegate.discover(100)).slice(0, 1);
+  }
+
+  fetch(sourceUrl: string): Promise<string> {
+    return this.delegate.fetch(sourceUrl);
+  }
+
+  parse(document: string, sourceUrl: string) {
+    return this.delegate.parse(document, sourceUrl).slice(0, 1);
+  }
+
+  normalize(product: ReturnType<LidlProvider['parse']>[number]) {
+    return this.delegate.normalize(product);
   }
 }
 
@@ -190,19 +225,8 @@ describe('SupermarketImportService', () => {
   });
 
   it('persists structured Lidl fixtures idempotently through the common model', async () => {
-    const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
-      const url = input.toString();
-      const body = url.includes('/tiendas/')
-        ? lidlStore
-        : url === 'https://www.lidl.es/'
-          ? lidlCampaignIndex
-          : url.includes('/ofertas-proxima-semana/')
-            ? lidlCampaignNext
-            : lidlCampaignCurrent;
-      return new Response(body, { status: 200 });
-    };
     const repository = new SupermarketImportRepository(testEnv.DB);
-    const service = new SupermarketImportService(repository, new LidlProvider(fetcher));
+    const service = new SupermarketImportService(repository, new LidlProvider(lidlFetcher));
 
     const first = await service.importLidl(20);
     const second = await service.importLidl(20);
@@ -244,6 +268,32 @@ describe('SupermarketImportService', () => {
     expect(shandy).toMatchObject({ offerPriceCents: 420, lidlPlusPriceCents: 329, upcoming: true });
   });
 
+  it('runs one controlled scheduled import and skips the second UTC trigger', async () => {
+    const repository = new SupermarketImportRepository(testEnv.DB);
+    const service = new SupermarketImportService(repository, new LidlProvider(lidlFetcher));
+    const logger = { info: () => undefined };
+
+    await expect(
+      runScheduledLidlImport(Date.parse('2026-07-15T03:00:00.000Z'), service, logger),
+    ).resolves.toMatchObject({
+      status: 'SUCCESS',
+      run: { productsSeen: 3, pricesSeen: 3, offersSeen: 5, rejectedItems: 0 },
+    });
+    await expect(
+      runScheduledLidlImport(Date.parse('2026-07-15T04:00:00.000Z'), service, logger),
+    ).resolves.toEqual({ status: 'SKIPPED_TIME' });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM import_runs WHERE provider = 'lidl'`,
+      ).first<{ count: number }>(),
+    ).toEqual({ count: 1 });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM offers WHERE requires_loyalty_card = 1`,
+      ).first<{ count: number }>(),
+    ).toEqual({ count: 3 });
+  });
+
   it('fails a Lidl campaign safely when it has no structured products', async () => {
     const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
       const url = input.toString();
@@ -269,5 +319,80 @@ describe('SupermarketImportService', () => {
       rejectedItems: 5,
       errorCode: 'LIDL_NO_VALID_PRODUCT',
     });
+  });
+
+  it('preserves the last valid Lidl dataset and freshness after a failed zero-result import', async () => {
+    const repository = new SupermarketImportRepository(testEnv.DB);
+    const validService = new SupermarketImportService(repository, new LidlProvider(lidlFetcher));
+    const valid = await validService.importLidl(20);
+    const validUpdate = await new LidlD1OffersProvider(testEnv.DB).getLastSuccessfulUpdate();
+    const countsBefore = await testEnv.DB.prepare(
+      `SELECT
+          (SELECT COUNT(*) FROM external_products WHERE supermarket_id = 'lidl') AS products,
+          (SELECT COUNT(*) FROM product_prices) AS prices,
+          (SELECT COUNT(*) FROM offers) AS offers`,
+    ).first<{ products: number; prices: number; offers: number }>();
+    const failedFetcher = async (input: RequestInfo | URL): Promise<Response> =>
+      new Response(input.toString().includes('/tiendas/') ? lidlStore : '<html>invalid</html>');
+
+    const failed = await new SupermarketImportService(
+      repository,
+      new LidlProvider(failedFetcher),
+    ).importLidl(20);
+    const countsAfter = await testEnv.DB.prepare(
+      `SELECT
+          (SELECT COUNT(*) FROM external_products WHERE supermarket_id = 'lidl') AS products,
+          (SELECT COUNT(*) FROM product_prices) AS prices,
+          (SELECT COUNT(*) FROM offers) AS offers`,
+    ).first<{ products: number; prices: number; offers: number }>();
+
+    expect(valid.status).toBe('SUCCESS');
+    expect(failed).toMatchObject({ status: 'FAILED', errorCode: 'LIDL_CAMPAIGNS_MISSING' });
+    expect(countsAfter).toEqual(countsBefore);
+    expect(await new LidlD1OffersProvider(testEnv.DB).getLastSuccessfulUpdate()).toBe(validUpdate);
+  });
+
+  it('skips a recent Lidl import and replaces a stale lock', async () => {
+    const repository = new SupermarketImportRepository(testEnv.DB);
+    const now = Date.now();
+    await repository.startRun('fresh-lock', 'lidl', new Date(now).toISOString());
+    const service = new SupermarketImportService(repository, new LidlProvider(lidlFetcher));
+
+    await expect(service.tryImportLidl(20)).resolves.toBeNull();
+    await testEnv.DB.prepare(`DELETE FROM import_runs WHERE id = 'fresh-lock'`).run();
+    await repository.startRun('stale-lock', 'lidl', new Date(now - 16 * 60 * 1000).toISOString());
+    await expect(service.tryImportLidl(20)).resolves.toMatchObject({ status: 'SUCCESS' });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT status, error_code FROM import_runs WHERE id = 'stale-lock'`,
+      ).first<{ status: string; error_code: string | null }>(),
+    ).toEqual({ status: 'FAILED', error_code: 'IMPORT_STALE' });
+  });
+
+  it('rejects an extreme Lidl product drop before persisting it', async () => {
+    const repository = new SupermarketImportRepository(testEnv.DB);
+    await repository.startRun('historical-run', 'lidl', '2026-08-28T03:00:00.000Z');
+    await repository.finishRun('historical-run', {
+      status: 'SUCCESS',
+      now: '2026-08-28T03:00:10.000Z',
+      productsSeen: 20,
+      pricesSeen: 20,
+      offersSeen: 20,
+      rejectedItems: 0,
+      errorCode: null,
+    });
+
+    await expect(
+      new SupermarketImportService(repository, new SingleProductLidlProvider()).importLidl(100),
+    ).resolves.toMatchObject({
+      status: 'FAILED',
+      productsSeen: 0,
+      errorCode: 'LIDL_SUSPICIOUS_PRODUCT_DROP',
+    });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM external_products WHERE supermarket_id = 'lidl'`,
+      ).first<{ count: number }>(),
+    ).toEqual({ count: 0 });
   });
 });

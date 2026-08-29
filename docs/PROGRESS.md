@@ -1,11 +1,30 @@
 # Progreso
 
-## Fase actual: extracción estructurada de campañas Lidl
+## Fase actual: actualización automática diaria de Lidl
 
 Estado: primera importación Lidl controlada en producción completada, validada e idempotente; la
-pestaña Ofertas usa exclusivamente datos reales Lidl. Cron continúa desactivado.
+pestaña Ofertas usa exclusivamente datos reales Lidl. La automatización diaria está configurada
+para las 05:00 de `Europe/Madrid` con guard de horario estacional y quedó desplegada el 29 de
+agosto de 2026.
 
 ### Implementado
+
+- Import automático exclusivo de Lidl mediante dos triggers Cloudflare Cron (`0 3 * * *` y
+  `0 4 * * *`). El handler calcula la hora real en `Europe/Madrid`: ejecuta sólo el trigger que
+  corresponde a las 05:00 locales y registra el otro como `SKIPPED_TIME` sin crear `import_run`.
+- El scheduled reutiliza directamente `SupermarketImportService`; no llama al endpoint HTTP ni
+  necesita `IMPORT_ADMIN_KEY`. Los imports manuales siguen protegidos por ese secret.
+- Lock D1 por proveedor: un `RUNNING` Lidl de menos de 15 minutos produce
+  `SKIPPED_ALREADY_RUNNING`; uno más antiguo se cierra como `FAILED/IMPORT_STALE` antes de permitir
+  un nuevo intento.
+- Productos y tiendas se validan y preparan antes de persistir. Cero productos produce
+  `LIDL_NO_VALID_PRODUCT` y una caída extrema frente al último `SUCCESS` produce
+  `LIDL_SUSPICIOUS_PRODUCT_DROP`; ambos conservan el último dataset válido.
+- La fecha mostrada como «Última actualización» procede del `finished_at` del último import Lidl
+  `SUCCESS`, no del último intento fallido ni de una oferta individual.
+- Prueba controlada del scheduled con Wrangler, hora CEST inyectada y proveedor Lidl real:
+  `SUCCESS`, 53 productos, 53 precios, 84 ofertas, 42 Lidl Plus y 0 rechazados sobre D1 de pruebas;
+  el segundo trigger hizo `SKIPPED_TIME` y quedó un único `import_run`.
 
 - Mutaciones de lista optimistas: altas, ediciones, borrados y checked/un-checked se reflejan en la
   interfaz antes de recibir la respuesta remota, conservando rollback ante rechazo y cola offline
@@ -37,12 +56,12 @@ pestaña Ofertas usa exclusivamente datos reales Lidl. Cron continúa desactivad
   segunda pasada, con 0 duplicados y validación oficial 10/10.
 - En producción hay 83 filas de oferta vigentes para 45 productos y 1 oferta futura; la UI agrupa
   precio regular, general y Lidl Plus por producto, y separa «Próximamente».
-- `SUPERMARKET_FEATURE_ENABLED=true` en la versión
-  `2c67aea7-479e-4b89-b8f0-85dcaacd46db`; `crons: []` continúa sin cambios.
+- `SUPERMARKET_FEATURE_ENABLED=true`; la lectura real de ofertas continúa separada del import
+  automático y sólo Lidl está autorizado en `scheduled()`.
 - Cuatro fixtures de campaña mínimos añadidos (índice, vigente, próxima y malformado); se conservan
   todos los fixtures anteriores y el demo visible continúa aislado.
-- No se creó migración `0007`; la infraestructura existente soportó ofertas general y Lidl Plus.
-  Sólo Lidl se importó remotamente y el cron sigue vacío.
+- No se creó migración `0007`; la infraestructura existente soporta las ofertas, el lock y la
+  automatización sin alterar el esquema.
 
 - `DiaProvider` real separado en discovery, fetch, parse, normalize, validación y persistencia.
 - Discovery estable de `/ofertas` y del localizador oficial de Zafra, sin URLs de campaña fechadas.
@@ -113,8 +132,8 @@ pestaña Ofertas usa exclusivamente datos reales Lidl. Cron continúa desactivad
 
 - 32 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden, caché offline,
   respuesta optimista y rollback.
-- 61 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import e
-  idempotencia; 93 pruebas en total.
+- 73 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import,
+  idempotencia, CET/CEST, DST, skip, lock, stale lock y fallback; 105 pruebas en total.
 - Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.
@@ -134,6 +153,14 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
   `160c5769-bc85-4fbe-a7ae-31b060043ca6`; bundle `main-QG2DZH6I.js`.
 - Smoke posterior a la optimización: shell y `/pair` `200`, salud `200`, API desconocida `404` y
   ruta privada sin token `401`. `SUPERMARKET_FEATURE_ENABLED=true` y `crons: []` se conservaron.
+- Automatización diaria Lidl desplegada el 29 de agosto de 2026 en la versión
+  `2d8ddce1-3d35-4a7a-b7bd-009ec85a0a9c`. Cloudflare confirmó los triggers `0 3 * * *` y
+  `0 4 * * *`; `SUPERMARKET_FEATURE_ENABLED=true` y no se añadió ninguna migración.
+- Smoke posterior al Cron: shell y `/pair` `200`, salud `200`, API desconocida `404`, ofertas sin
+  token `401` y `/ws` sin upgrade `426`. Los conteos familiares permanecieron en 1 hogar, 2
+  dispositivos, 1 ciclo activo, 5 items y 5 preferencias. El catálogo remoto siguió en 53
+  productos, 53 precios, 84 ofertas (42 Lidl Plus), 83 vigentes y 1 futura antes del primer disparo
+  natural.
 - Worker, Angular Static Assets, D1 y Durable Object comparten despliegue y origen.
 - Preview URLs deshabilitadas explícitamente.
 - Smoke tests: shell, manifest, service worker, `/pair` y salud responden `200`; API privada sin

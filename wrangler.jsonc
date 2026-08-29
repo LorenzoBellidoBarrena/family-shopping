@@ -24,6 +24,6 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HouseholdCoordinator"] }],
   "vars": { "SUPERMARKET_FEATURE_ENABLED": "true" },
-  "triggers": { "crons": [] },
+  "triggers": { "crons": ["0 3 * * *", "0 4 * * *"] },
   "observability": { "enabled": true },
 }
