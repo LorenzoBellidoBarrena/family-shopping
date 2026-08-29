@@ -130,6 +130,10 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
 - Migraciones `0001` y `0002` aplicadas; no quedan migraciones remotas pendientes.
 - `npm run verify` pasó antes del deploy.
 - URL: `https://family-shopping.lorenzo-bellido-b.workers.dev`.
+- Optimización de mutaciones desplegada el 29 de agosto de 2026 en la versión
+  `160c5769-bc85-4fbe-a7ae-31b060043ca6`; bundle `main-QG2DZH6I.js`.
+- Smoke posterior a la optimización: shell y `/pair` `200`, salud `200`, API desconocida `404` y
+  ruta privada sin token `401`. `SUPERMARKET_FEATURE_ENABLED=true` y `crons: []` se conservaron.
 - Worker, Angular Static Assets, D1 y Durable Object comparten despliegue y origen.
 - Preview URLs deshabilitadas explícitamente.
 - Smoke tests: shell, manifest, service worker, `/pair` y salud responden `200`; API privada sin
