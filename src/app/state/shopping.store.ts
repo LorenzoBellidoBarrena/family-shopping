@@ -84,20 +84,32 @@ export class ShoppingStore {
     this.loadingState.set(true);
     this.errorState.set(null);
     this.errorCodeState.set(null);
-    const cached = await this.cache.loadCycle();
-    if (cached) {
-      this.currentCycle.set(cached);
-      this.cachedState.set(true);
+    let cached: ShoppingCycle | null = null;
+    try {
+      try {
+        cached = await this.cache.loadCycle();
+        if (cached) {
+          this.currentCycle.set(cached);
+          this.cachedState.set(true);
+        }
+        await this.updatePendingCount();
+      } catch {
+        // IndexedDB is an optional resilience layer. A damaged or unavailable cache
+        // must not prevent the canonical online list from loading.
+      }
+
+      if (this.network.online()) {
+        await Promise.all([this.reconcile(), this.loadMetadata()]);
+      } else if (!cached) {
+        this.errorState.set('Todavía no hay una lista guardada en este móvil.');
+      }
+    } catch (error) {
+      this.handleError(error);
+    } finally {
+      this.started = this.tokens.hasToken();
+      if (this.started) this.startRealtime();
+      this.loadingState.set(false);
     }
-    await this.updatePendingCount();
-    if (this.network.online()) {
-      await Promise.all([this.reconcile(), this.loadMetadata()]);
-    } else if (!cached) {
-      this.errorState.set('Todavía no hay una lista guardada en este móvil.');
-    }
-    this.started = true;
-    this.startRealtime();
-    this.loadingState.set(false);
   }
 
   async bootstrap(input: BootstrapInput): Promise<boolean> {

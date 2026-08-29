@@ -162,6 +162,27 @@ describe('bootstrap and pairing onboarding', () => {
     expect(text()).toContain('Código de vinculación');
   });
 
+  it('leaves the loading screen and requests pairing when a stored token is unauthorized', async () => {
+    tokens.save('expired-device-token');
+    const unauthorized = new ShoppingApiError(
+      'Se necesita un dispositivo autorizado.',
+      401,
+      'UNAUTHORIZED',
+    );
+    api.getActiveCycle.mockRejectedValueOnce(unauthorized);
+    api.getSupermarkets.mockRejectedValueOnce(unauthorized);
+    api.getSuggestions.mockRejectedValueOnce(unauthorized);
+
+    createApp();
+    await vi.waitFor(() => expect(tokens.clear).toHaveBeenCalled());
+    await settle();
+
+    expect(text()).not.toContain('Cargando la lista');
+    expect(text()).toContain('Este dispositivo ya no está autorizado');
+    expect(text()).toContain('Vincular este móvil');
+    expect(realtime.connect).not.toHaveBeenCalled();
+  });
+
   function createApp(): void {
     fixture = TestBed.createComponent(App);
     fixture.detectChanges();
