@@ -27,10 +27,9 @@ export class ShoppingService {
   async addItem(device: Device, body: JsonObject) {
     const normalizedName = normalizeProductName(requiredName(body['name']));
     const requestedCategory = parseProductCategory(body['category']);
-    const learnedCategory = await this.repository.getPreferenceCategory(
-      device.householdId,
-      normalizedName,
-    );
+    const learnedCategory = requestedCategory
+      ? null
+      : await this.repository.getPreferenceCategory(device.householdId, normalizedName);
     const category =
       requestedCategory ?? learnedCategory ?? classifyNormalizedProductName(normalizedName);
     const values = parseItemValues(body, category);

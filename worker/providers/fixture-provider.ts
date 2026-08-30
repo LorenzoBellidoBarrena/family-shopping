@@ -34,6 +34,7 @@ export abstract class FixtureProvider implements SupermarketProvider {
       brand: offer.brand ?? null,
       category: offer.category,
       visualCategory: 'OTHER',
+      offerBrowseCategory: 'OTHER',
       packageLabel: offer.packageLabel,
       normalPriceCents: offer.normalPriceCents ?? null,
       offerPriceCents: offer.offerPriceCents,

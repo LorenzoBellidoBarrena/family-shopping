@@ -121,7 +121,7 @@
       </section>
     } @else if (view() === 'settings') {
       <section class="settings-card" aria-labelledby="settings-title">
-        <button class="back-button" type="button" (click)="view.set('list')">← Volver</button>
+        <button class="back-button" type="button" (click)="showList()">← Volver</button>
         <h2 id="settings-title">Ajustes</h2>
         <div class="device-status">
           <span aria-hidden="true">✓</span>
@@ -200,16 +200,16 @@
         <div class="offers-heading">
           <div>
             <p class="eyebrow">
-              {{ store.offersMode() === 'REAL' ? 'Datos reales · Lidl' : 'Datos de demostración' }}
+              {{ offersState.mode() === 'REAL' ? 'Datos reales · Lidl' : 'Datos de demostración' }}
             </p>
             <h2 id="offers-title">Ofertas</h2>
           </div>
-          <span>{{ store.offersMode() === 'REAL' ? 'Badajoz' : 'Zafra' }}</span>
+          <span>{{ offersState.mode() === 'REAL' ? 'Badajoz' : 'Zafra' }}</span>
         </div>
-        @if (store.offersMode() === 'REAL') {
+        @if (offersState.mode() === 'REAL') {
           <p class="supporting-text">
             Campañas regionales de Badajoz · Última actualización:
-            {{ formatUpdatedAt(store.offersLastUpdatedAt()) }}
+            {{ formatUpdatedAt(offersState.lastUpdatedAt()) }}
           </p>
           @if (store.lidlPlusStatus() === 'UNKNOWN') {
             <p class="loyalty-config-hint">
@@ -234,25 +234,47 @@
             </button>
           }
         </div>
+        @if (offersState.categories().length > 0) {
+          <div class="offer-filters" aria-label="Filtrar ofertas por categoría">
+            <button
+              type="button"
+              [class.offer-filter--active]="offerCategory() === 'all'"
+              [attr.aria-pressed]="offerCategory() === 'all'"
+              (click)="selectOfferCategory('all')"
+            >
+              ✨ Todas
+            </button>
+            @for (category of offersState.categories(); track category.code) {
+              <button
+                type="button"
+                [class.offer-filter--active]="offerCategory() === category.code"
+                [attr.aria-pressed]="offerCategory() === category.code"
+                (click)="selectOfferCategory(category.code)"
+              >
+                {{ category.emoji }} {{ category.label }} {{ category.count }}
+              </button>
+            }
+          </div>
+        }
 
-        @if (store.offline()) {
+        @if (offersState.offline()) {
           <div class="empty-state">
             <span aria-hidden="true">⌁</span>
             <h3>Ofertas no disponibles sin conexión</h3>
             <p>La lista familiar sigue funcionando con normalidad.</p>
           </div>
-        } @else if (store.offersLoading()) {
+        } @else if (offersState.loading()) {
           <div class="empty-state" aria-live="polite">
             <span class="spinner" aria-hidden="true"></span>
             <h3>Cargando ofertas…</h3>
           </div>
-        } @else if (store.offers().length === 0) {
+        } @else if (offersState.offers().length === 0) {
           <div class="empty-state">
             <span aria-hidden="true">％</span>
             <h3>No hay ofertas para este filtro</h3>
           </div>
         } @else {
-          @if (store.offersPartial()) {
+          @if (offersState.partial()) {
             <div class="connection-banner" role="status">
               Un proveedor no respondió; se muestran los demás resultados.
             </div>
@@ -383,9 +405,9 @@
                         <button
                           class="secondary-button match-button"
                           type="button"
-                          [disabled]="store.offersLoading()"
+                          [disabled]="offersState.loading()"
                           (click)="
-                            store.confirmOfferMatch(
+                            offersState.confirmMatch(
                               match.shoppingItemId,
                               candidate.externalProductId
                             )
@@ -417,9 +439,9 @@
                     <button
                       type="button"
                       [class.match-choice--selected]="candidate.preferred"
-                      [disabled]="store.offersLoading()"
+                      [disabled]="offersState.loading()"
                       (click)="
-                        store.confirmOfferMatch(match.shoppingItemId, candidate.externalProductId)
+                        offersState.confirmMatch(match.shoppingItemId, candidate.externalProductId)
                       "
                     >
                       <span>{{ candidate.productName }}</span>
@@ -445,8 +467,8 @@
                   <button
                     class="text-button"
                     type="button"
-                    [disabled]="store.offersLoading()"
-                    (click)="store.dismissOfferMatch(match.shoppingItemId)"
+                    [disabled]="offersState.loading()"
+                    (click)="offersState.dismissMatch(match.shoppingItemId)"
                   >
                     No relacionar automáticamente
                   </button>
@@ -558,6 +580,11 @@
                 </article>
               }
             </div>
+          }
+          @if (canLoadMoreOffers()) {
+            <button class="secondary-button" type="button" (click)="loadMoreOffers()">
+              Ver más ofertas
+            </button>
           }
         }
       </section>
@@ -775,7 +802,7 @@
         type="button"
         class="nav-item"
         [class.nav-item--active]="view() === 'list'"
-        (click)="view.set('list')"
+        (click)="showList()"
       >
         <span aria-hidden="true">☷</span> Lista
       </button>
@@ -791,7 +818,7 @@
         type="button"
         class="nav-item"
         [class.nav-item--active]="view() === 'settings'"
-        (click)="view.set('settings')"
+        (click)="showSettings()"
       >
         <span aria-hidden="true">⚙</span> Ajustes
       </button>

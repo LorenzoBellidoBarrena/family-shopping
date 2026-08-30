@@ -1,35 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { CatalogOffer, SupermarketProvider } from '../domain/supermarkets';
-import type { ShoppingCycle } from '../domain/types';
 import { LidlFixtureProvider } from '../providers/lidl-fixture-provider';
 import { OffersService } from './offers-service';
 import { productsMatch } from './product-matching';
 
-const cycle: ShoppingCycle = {
-  id: 'cycle-1',
-  householdId: 'household-1',
-  status: 'ACTIVE',
-  createdAt: '2026-08-28T00:00:00.000Z',
-  closedAt: null,
-  closeReason: null,
-  items: [
-    {
-      id: 'item-1',
-      shoppingCycleId: 'cycle-1',
-      name: 'Huevos',
-      normalizedName: 'huevos',
-      category: 'EGGS',
-      quantity: '1',
-      unit: 'caja',
-      supermarketId: null,
-      checked: false,
-      sortOrder: 1000,
-      createdAt: '2026-08-28T00:00:00.000Z',
-      updatedAt: '2026-08-28T00:00:00.000Z',
-      checkedAt: null,
-    },
-  ],
-};
+const createdAt = '2026-08-28T00:00:00.000Z';
 
 describe('offers providers and product matching', () => {
   it('keeps successful providers available when another provider fails', async () => {
@@ -37,18 +12,15 @@ describe('offers providers and product matching', () => {
       supermarketId: 'dia',
       listPublishedOffers: () => Promise.reject(new Error('fixture provider unavailable')),
     };
-    const service = new OffersService({ getActiveCycle: async () => cycle }, [
-      new LidlFixtureProvider(),
-      failingProvider,
-    ]);
+    const service = new OffersService([new LidlFixtureProvider(), failingProvider]);
 
     const result = await service.list(
       {
         id: 'device-1',
         householdId: 'household-1',
         name: null,
-        createdAt: cycle.createdAt,
-        lastSeenAt: cycle.createdAt,
+        createdAt,
+        lastSeenAt: createdAt,
       },
       new URL('https://example.test/api/offers'),
     );
@@ -62,20 +34,50 @@ describe('offers providers and product matching', () => {
     const lastSuccessfulUpdate = '2026-08-28T05:00:10.000Z';
     const provider = new LidlFixtureProvider() as LidlFixtureProvider & SupermarketProvider;
     provider.getLastSuccessfulUpdate = async () => lastSuccessfulUpdate;
-    const service = new OffersService({ getActiveCycle: async () => cycle }, [provider], 'REAL');
+    const service = new OffersService([provider], 'REAL');
 
     const result = await service.list(
       {
         id: 'device-1',
         householdId: 'household-1',
         name: null,
-        createdAt: cycle.createdAt,
-        lastSeenAt: cycle.createdAt,
+        createdAt,
+        lastSeenAt: createdAt,
       },
       new URL('https://example.test/api/offers'),
     );
 
     expect(result.lastUpdatedAt).toBe(lastSuccessfulUpdate);
+  });
+
+  it('browses offers without reading the active shopping cycle', async () => {
+    const fixtures = await new LidlFixtureProvider().listPublishedOffers();
+    const provider: SupermarketProvider = {
+      supermarketId: 'lidl',
+      listPublishedOffers: async () => [
+        { ...fixtures[0], offerBrowseCategory: 'FOOD' },
+        { ...fixtures[1], offerBrowseCategory: 'CLEANING' },
+      ],
+      listBrowseCategoryCounts: async () => ({ FOOD: 1, CLEANING: 1 }),
+    };
+    const result = await new OffersService([provider]).list(
+      {
+        id: 'device-1',
+        householdId: 'household-1',
+        name: null,
+        createdAt,
+        lastSeenAt: createdAt,
+      },
+      new URL('https://example.test/api/offers?category=FOOD'),
+    );
+
+    expect(result.offers).toHaveLength(1);
+    expect(result.offers[0].offerBrowseCategory).toBe('FOOD');
+    expect(result.offers.every((offer) => !offer.relatedToList)).toBe(true);
+    expect(result.categories).toEqual([
+      { code: 'FOOD', label: 'Comida', emoji: '🍎', count: 1 },
+      { code: 'CLEANING', label: 'Limpieza', emoji: '🧹', count: 1 },
+    ]);
   });
 
   it('matches aliases without relying only on exact strings', () => {

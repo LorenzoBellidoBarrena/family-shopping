@@ -44,8 +44,8 @@ export const routeApi = async (
   const loyalty = new HouseholdLoyaltyService(loyaltyRepository);
   const offers =
     env.SUPERMARKET_FEATURE_ENABLED === 'true'
-      ? new OffersService(repository, [new LidlD1OffersProvider(env.DB)], 'REAL', loyaltyRepository)
-      : new OffersService(repository);
+      ? new OffersService([new LidlD1OffersProvider(env.DB)], 'REAL', loyaltyRepository)
+      : new OffersService();
   const listMatching = new ListOfferMatchingService(
     repository,
     new ProductMatchRepository(env.DB),

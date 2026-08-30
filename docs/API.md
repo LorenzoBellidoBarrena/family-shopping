@@ -209,7 +209,7 @@ Los endpoints de importación usan `x-import-admin-key` con el secret independie
 | `POST` | `/api/admin/imports/lidl`      | Import manual acotado de Lidl.      |
 
 El `POST` admite `limit=1..20`; Lidl admite `limit=1..100` para repartir un límite global entre un
-máximo de cinco campañas. Exige siempre `IMPORT_ADMIN_KEY`, independientemente del flag visible, de
+máximo de diez campañas. Exige siempre `IMPORT_ADMIN_KEY`, independientemente del flag visible, de
 modo que una importación controlada puede validarse antes de habilitar la UI. Las respuestas nunca
 incluyen HTML remoto, cookies, stack traces ni secretos.
 
@@ -223,3 +223,14 @@ tienda oficial de Zafra. Extrae exclusivamente el JSON estructurado embebido en 
 selecciona la región Badajoz declarada por Lidl y persiste el catálogo con scope `REGIONAL`; nunca
 lo presenta como stock ni como precio específico de la tienda de Zafra. El visor de folletos se
 conserva sólo para metadata y no se procesa mediante OCR.
+
+## Consulta de ofertas por categoría
+
+`GET /api/offers` admite `supermarket` y `category`. Una categoría desconocida devuelve
+`INVALID_OFFER_CATEGORY`. La respuesta incluye `categories` con código, label, emoji y contador en
+una sola agregación; no hace una query por chip. El catálogo devuelve siempre
+`relatedToList=false`: la relación familiar sólo se obtiene desde `GET /api/offers/for-list`.
+
+`category` utiliza `OfferBrowseCategory`, no `ProductCategory`. El endpoint sigue protegido por
+device token y tolera fallos parciales de providers. Las fechas vigentes/próximas y el scope
+regional no cambian.

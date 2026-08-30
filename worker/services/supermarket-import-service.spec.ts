@@ -316,7 +316,7 @@ describe('SupermarketImportService', () => {
       productsSeen: 0,
       pricesSeen: 0,
       offersSeen: 0,
-      rejectedItems: 5,
+      rejectedItems: 6,
       errorCode: 'LIDL_NO_VALID_PRODUCT',
     });
   });

@@ -196,3 +196,28 @@ caducado, usado o inexistente obtiene la misma respuesta para no revelar su esta
 
 La PWA precachea sólo la shell y los recursos estáticos. Las respuestas privadas de `/api` no se
 guardan en Cache Storage; la copia offline controlada vive en IndexedDB. Véase [OFFLINE.md](OFFLINE.md).
+
+## Aislamiento de rendimiento entre Lista y Ofertas
+
+`ShoppingStore` conserva exclusivamente ciclo, CRUD, preferencias, conexión y ajustes familiares.
+`OffersStore` posee catálogo, categorías, matching, caché y carga de Ofertas. La dependencia es de
+Ofertas hacia la versión de Lista, nunca al revés. Entrar en Ofertas inicia catálogo y matching bajo
+demanda; salir aborta ambas peticiones HTTP. Una mutación de lista sólo incrementa una versión local
+y el matching se recalcula la próxima vez que Ofertas esté activa.
+
+Alta, edición, toggle y borrado actualizan primero la señal local y hacen rollback si falla el
+servidor. La respuesta REST sigue siendo el item mutado. El Durable Object excluye de broadcast al
+dispositivo origen; otros dispositivos conservan una reconciliación canónica completa por evento,
+además de la recuperación completa al reconectar. Con el volumen familiar actual, se prioriza esa
+corrección sobre introducir un segundo modelo incremental de conflictos.
+
+`GET /api/offers` ya no lee el ciclo ni ejecuta matching. `GET /api/offers/for-list` es el único
+camino que relaciona lista y catálogo y sólo se invoca desde la vista Ofertas. El cliente mantiene
+catálogo cinco minutos por cadena/categoría/estado loyalty y matching por versión de lista. El
+provider D1 comparte únicamente consultas simultáneas dentro del isolate y las invalida al terminar;
+la vigencia real continúa determinada por el último import persistido.
+
+No se añadió un chunk lazy de Angular: la aplicación sigue siendo un shell standalone único y la
+vista de Ofertas está en el mismo template. La medición mostró que el problema era trabajo HTTP/D1
+que sobrevivía a la navegación, no evaluación de Signals. Separar el estado y cancelar I/O elimina
+la interferencia sin una reescritura riesgosa del routing; `@for` sigue usando IDs estables.

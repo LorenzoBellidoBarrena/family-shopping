@@ -1,4 +1,5 @@
 import { classifyNormalizedProductName } from '../../src/shared/product-category';
+import { classifyOfferBrowseCategory } from '../../src/shared/offer-browse-category';
 import type {
   ImportedOffer,
   ImportedProduct,
@@ -266,6 +267,7 @@ export class CarrefourImportProvider implements SupermarketImportProvider {
     const validUntil = product.validUntil ?? validFrom;
     const normalPriceCents = cents(product.normalPriceText);
     const parsedUnitPrice = unitPrice(product.unitPriceText);
+    const visualCategory = classifyNormalizedProductName(normalizedName);
     return {
       externalId: product.externalId,
       ean: product.ean?.trim() || null,
@@ -273,7 +275,12 @@ export class CarrefourImportProvider implements SupermarketImportProvider {
       normalizedName,
       brand: product.brand?.trim() || null,
       commercialCategory: product.commercialCategory?.trim() || null,
-      visualCategory: classifyNormalizedProductName(normalizedName),
+      visualCategory,
+      offerBrowseCategory: classifyOfferBrowseCategory({
+        officialCategory: product.commercialCategory,
+        visualCategory,
+        normalizedName,
+      }),
       imageUrl: product.imageUrl?.trim() || null,
       packageQuantity: product.packageQuantity ?? null,
       packageUnit: product.packageUnit?.trim() || null,

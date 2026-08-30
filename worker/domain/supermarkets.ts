@@ -1,4 +1,5 @@
 import type { ProductCategory } from '../../src/shared/product-category';
+import type { OfferBrowseCategory } from '../../src/shared/offer-browse-category';
 import type { PackageCalculation } from './package';
 import type { OfferType } from './supermarket-import';
 import type { Unit } from './types';
@@ -20,6 +21,7 @@ export interface CatalogOffer {
   brand: string | null;
   category: string | null;
   visualCategory: ProductCategory;
+  offerBrowseCategory: OfferBrowseCategory;
   packageLabel: string | null;
   normalPriceCents: number | null;
   offerPriceCents: number;
@@ -50,7 +52,8 @@ export interface PresentedOffer extends CatalogOffer {
 
 export interface SupermarketProvider {
   readonly supermarketId: OfferSupermarketId;
-  listPublishedOffers(): Promise<CatalogOffer[]>;
+  listPublishedOffers(category?: OfferBrowseCategory): Promise<CatalogOffer[]>;
+  listBrowseCategoryCounts?(): Promise<Partial<Record<OfferBrowseCategory, number>>>;
   getLastSuccessfulUpdate?(): Promise<string | null>;
 }
 

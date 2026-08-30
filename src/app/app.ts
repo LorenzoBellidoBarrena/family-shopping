@@ -6,6 +6,7 @@ import { SwUpdate } from '@angular/service-worker';
 import QRCode from 'qrcode';
 import type {
   OfferSupermarketId,
+  OfferBrowseCategory,
   ListMatchCandidate,
   PackageCalculation,
   EffectivePriceReason,
@@ -18,6 +19,7 @@ import type {
 import { UNITS } from './core/api.models';
 import { PRODUCT_CATEGORIES, productCategoryDefinition } from '../shared/product-category';
 import { ShoppingStore } from './state/shopping.store';
+import { OffersStore } from './state/offers.store';
 
 @Component({
   imports: [FormsModule],
@@ -26,6 +28,7 @@ import { ShoppingStore } from './state/shopping.store';
 })
 export class App implements OnInit {
   protected readonly store = inject(ShoppingStore);
+  protected readonly offersState = inject(OffersStore);
   private readonly document = inject(DOCUMENT);
   private readonly router = inject(Router);
   private readonly swUpdate = inject(SwUpdate, { optional: true });
@@ -36,6 +39,8 @@ export class App implements OnInit {
   protected readonly categoryDetails = productCategoryDefinition;
   protected readonly view = signal<'list' | 'offers' | 'settings'>('list');
   protected readonly offerFilter = signal<'all' | OfferSupermarketId>('all');
+  protected readonly offerCategory = signal<'all' | OfferBrowseCategory>('all');
+  private readonly offerVisibleLimit = signal(24);
   protected readonly offerFilters: readonly {
     id: 'all' | OfferSupermarketId;
     name: string;
@@ -68,21 +73,20 @@ export class App implements OnInit {
       this.store.allChecked() && cycle !== null && this.dismissedCompletionCycle() !== cycle.id
     );
   });
-  protected readonly activeOffers = computed(() =>
-    this.store.offers().filter((offer) => !offer.upcoming),
-  );
+  protected readonly activeOffers = computed(() => this.offersState.activeOffers());
+  private readonly allUpcomingOffers = computed(() => this.offersState.upcomingOffers());
   protected readonly upcomingOffers = computed(() =>
-    this.store.offers().filter((offer) => offer.upcoming),
+    this.allUpcomingOffers().slice(0, this.offerVisibleLimit()),
   );
   protected readonly pendingOfferMatches = computed(() =>
-    this.store.offerMatches().filter((match) => !match.checked),
+    this.offersState.offerMatches().filter((match) => !match.checked),
   );
   protected readonly relatedOfferMatches = computed(() =>
     this.pendingOfferMatches().filter((match) =>
       match.candidates.some((candidate) => candidate.activeOffers.length > 0),
     ),
   );
-  protected readonly otherActiveOffers = computed(() => {
+  private readonly allOtherActiveOffers = computed(() => {
     const relatedOfferIds = new Set(
       this.relatedOfferMatches().flatMap((match) =>
         match.candidates.flatMap((candidate) => candidate.activeOffers.map((offer) => offer.id)),
@@ -90,6 +94,14 @@ export class App implements OnInit {
     );
     return this.activeOffers().filter((offer) => !relatedOfferIds.has(offer.id));
   });
+  protected readonly otherActiveOffers = computed(() =>
+    this.allOtherActiveOffers().slice(0, this.offerVisibleLimit()),
+  );
+  protected readonly canLoadMoreOffers = computed(
+    () =>
+      this.allOtherActiveOffers().length > this.offerVisibleLimit() ||
+      this.allUpcomingOffers().length > this.offerVisibleLimit(),
+  );
 
   protected setupAccessKey = '';
   protected householdName = 'Mi hogar';
@@ -181,7 +193,7 @@ export class App implements OnInit {
 
   protected onQuickNameChange(): void {
     this.quickCategory = null;
-    void this.store.searchSuggestions(this.quickName);
+    this.store.searchSuggestions(this.quickName);
   }
 
   protected applySuggestion(preference: ProductPreference): void {
@@ -279,14 +291,48 @@ export class App implements OnInit {
   }
 
   protected showOffers(): void {
+    this.offerVisibleLimit.set(24);
     this.view.set('offers');
     const filter = this.offerFilter();
-    void this.store.loadOffers(filter === 'all' ? undefined : filter);
+    const category = this.offerCategory();
+    this.offersState.enter(
+      filter === 'all' ? undefined : filter,
+      category === 'all' ? undefined : category,
+    );
   }
 
   protected selectOfferFilter(filter: 'all' | OfferSupermarketId): void {
+    this.offerVisibleLimit.set(24);
     this.offerFilter.set(filter);
-    void this.store.loadOffers(filter === 'all' ? undefined : filter);
+    const category = this.offerCategory();
+    void this.offersState.load(
+      filter === 'all' ? undefined : filter,
+      category === 'all' ? undefined : category,
+    );
+  }
+
+  protected selectOfferCategory(category: 'all' | OfferBrowseCategory): void {
+    this.offerVisibleLimit.set(24);
+    this.offerCategory.set(category);
+    const filter = this.offerFilter();
+    void this.offersState.load(
+      filter === 'all' ? undefined : filter,
+      category === 'all' ? undefined : category,
+    );
+  }
+
+  protected showList(): void {
+    this.offersState.leave();
+    this.view.set('list');
+  }
+
+  protected showSettings(): void {
+    this.offersState.leave();
+    this.view.set('settings');
+  }
+
+  protected loadMoreOffers(): void {
+    this.offerVisibleLimit.update((limit) => limit + 24);
   }
 
   protected formatPrice(cents: number): string {

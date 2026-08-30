@@ -36,6 +36,11 @@ estado deseado y no alteran su posición.
 Una interrupción durante este proceso es segura: las operaciones no confirmadas permanecen para el
 siguiente intento, y cada intento vuelve a comparar contra D1 antes de mutar.
 
+Ofertas sigue siendo exclusivamente online y no amplía IndexedDB. Al abandonar esa vista se abortan
+catálogo y matching en curso; no pueden retrasar un toggle offline ni la reconciliación de Lista. El
+cache de Ofertas vive sólo en memoria durante la sesión y nunca se mezcla con la copia canónica del
+ciclo familiar.
+
 ## Límites de seguridad
 
 El token del dispositivo vive en `localStorage` y la lista offline en IndexedDB. Son privados frente

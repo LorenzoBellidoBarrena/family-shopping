@@ -12,12 +12,12 @@ const nextUrl = 'https://www.lidl.es/c/ofertas-proxima-semana/a10088432';
 const storeUrl = 'https://www.lidl.es/s/es-ES/tiendas/zafra/c-torre-san-francisco-2a/';
 
 describe('LidlProvider', () => {
-  it('discovers current, next and fresh food campaigns without bazaar links', () => {
+  it('discovers current, next, fresh and useful non-food campaigns', () => {
     const sources = new LidlProvider().parseCampaignDiscovery(campaignIndex);
-    expect(sources).toHaveLength(5);
+    expect(sources).toHaveLength(6);
     expect(sources[0]).toBe(currentUrl);
     expect(sources[1]).toBe(nextUrl);
-    expect(sources.join(' ')).not.toContain('/bazar/');
+    expect(sources.join(' ')).toContain('/bazar/');
   });
 
   it('keeps the legacy public leaflet discovery only as metadata support', () => {
@@ -49,6 +49,7 @@ describe('LidlProvider', () => {
     expect(products[0]).toMatchObject({
       externalId: '11029919',
       name: 'Uva blanca sin semilla',
+      offerBrowseCategory: 'FRESH',
       priceCents: 235,
       packageQuantity: 750,
       packageUnit: 'g',
@@ -83,6 +84,7 @@ describe('LidlProvider', () => {
     expect(product).toMatchObject({
       externalId: '11003777',
       name: 'Argus Shandy',
+      offerBrowseCategory: 'DRINKS',
       brand: 'Argus',
       priceCents: 420,
       packageQuantity: null,

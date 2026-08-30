@@ -1,4 +1,5 @@
 import type { ProductCategory } from '../../src/shared/product-category';
+import type { OfferBrowseCategory } from '../../src/shared/offer-browse-category';
 import type { OfferType } from '../domain/supermarket-import';
 import type { CatalogOffer, SupermarketProvider } from '../domain/supermarkets';
 
@@ -10,6 +11,7 @@ interface OfferRow {
   brand: string | null;
   category: string | null;
   visual_category: ProductCategory;
+  offer_browse_category: OfferBrowseCategory;
   package_quantity: number | null;
   package_unit: string | null;
   package_description: string | null;
@@ -32,6 +34,23 @@ interface OfferRow {
   observed_at: string;
 }
 
+interface ProviderCache {
+  lastUpdate: { expiresAt: number; value: Promise<string | null> } | null;
+  offers: Map<string, Promise<CatalogOffer[]>>;
+  counts: Map<string, Promise<Partial<Record<OfferBrowseCategory, number>>>>;
+}
+
+const providerCaches = new WeakMap<D1Database, ProviderCache>();
+const LAST_UPDATE_CACHE_MS = 5_000;
+
+const cacheFor = (db: D1Database): ProviderCache => {
+  const existing = providerCaches.get(db);
+  if (existing) return existing;
+  const created: ProviderCache = { lastUpdate: null, offers: new Map(), counts: new Map() };
+  providerCaches.set(db, created);
+  return created;
+};
+
 const packageLabel = (
   description: string | null,
   quantity: number | null,
@@ -50,11 +69,51 @@ export class LidlD1OffersProvider implements SupermarketProvider {
     private readonly today = new Date().toISOString().slice(0, 10),
   ) {}
 
-  async listPublishedOffers(): Promise<CatalogOffer[]> {
-    const { results } = await this.db
+  async listPublishedOffers(category?: OfferBrowseCategory): Promise<CatalogOffer[]> {
+    const version = (await this.getLastSuccessfulUpdate()) ?? 'none';
+    const cache = cacheFor(this.db);
+    const key = `${this.today}:${version}:${category ?? 'ALL'}`;
+    const cached = cache.offers.get(key);
+    if (cached) return cached;
+    const loading = this.queryPublishedOffers(category).finally(() => cache.offers.delete(key));
+    cache.offers.set(key, loading);
+    return loading;
+  }
+
+  async listBrowseCategoryCounts(): Promise<Partial<Record<OfferBrowseCategory, number>>> {
+    const version = (await this.getLastSuccessfulUpdate()) ?? 'none';
+    const cache = cacheFor(this.db);
+    const key = `${this.today}:${version}`;
+    const cached = cache.counts.get(key);
+    if (cached) return cached;
+    const loading = this.queryBrowseCategoryCounts().finally(() => cache.counts.delete(key));
+    cache.counts.set(key, loading);
+    return loading;
+  }
+
+  async getLastSuccessfulUpdate(): Promise<string | null> {
+    const cache = cacheFor(this.db);
+    if (cache.lastUpdate && cache.lastUpdate.expiresAt > Date.now()) {
+      return cache.lastUpdate.value;
+    }
+    const value = this.db
       .prepare(
-        `SELECT o.id, o.product_id, ep.name, ep.normalized_name, ep.brand, ep.category,
-                ep.visual_category, ep.package_quantity, ep.package_unit, ep.package_description,
+        `SELECT finished_at FROM import_runs
+         WHERE provider = 'lidl' AND status = 'SUCCESS' AND finished_at IS NOT NULL
+         ORDER BY finished_at DESC, started_at DESC LIMIT 1`,
+      )
+      .first<{ finished_at: string }>()
+      .then((row) => row?.finished_at ?? null);
+    cache.lastUpdate = { expiresAt: Date.now() + LAST_UPDATE_CACHE_MS, value };
+    return value;
+  }
+
+  private async queryPublishedOffers(category?: OfferBrowseCategory): Promise<CatalogOffer[]> {
+    const categoryClause = category ? 'AND ep.offer_browse_category = ?' : '';
+    const prepared = this.db.prepare(
+      `SELECT o.id, o.product_id, ep.name, ep.normalized_name, ep.brand, ep.category,
+                ep.visual_category, ep.offer_browse_category, ep.package_quantity,
+                ep.package_unit, ep.package_description,
                 pp.price_cents AS base_price_cents, pp.unit_price_cents,
                 o.normal_price_cents, o.offer_price_cents, o.promotion_type,
                 o.offer_type, o.percentage, o.buy_quantity, o.pay_quantity,
@@ -69,10 +128,12 @@ export class LidlD1OffersProvider implements SupermarketProvider {
          )
          WHERE ep.supermarket_id = 'lidl'
            AND (o.valid_until IS NULL OR o.valid_until >= ?)
+           ${categoryClause}
          ORDER BY ep.name, o.valid_from, o.requires_loyalty_card`,
-      )
-      .bind(this.today)
-      .all<OfferRow>();
+    );
+    const { results } = await (
+      category ? prepared.bind(this.today, category) : prepared.bind(this.today)
+    ).all<OfferRow>();
 
     const grouped = new Map<string, CatalogOffer>();
     for (const row of results) {
@@ -105,6 +166,7 @@ export class LidlD1OffersProvider implements SupermarketProvider {
         brand: row.brand,
         category: row.category,
         visualCategory: row.visual_category,
+        offerBrowseCategory: row.offer_browse_category,
         packageLabel: packageLabel(row.package_description, row.package_quantity, row.package_unit),
         normalPriceCents: row.normal_price_cents,
         offerPriceCents: isLidlPlus ? row.base_price_cents : row.offer_price_cents,
@@ -130,14 +192,22 @@ export class LidlD1OffersProvider implements SupermarketProvider {
     return [...grouped.values()];
   }
 
-  async getLastSuccessfulUpdate(): Promise<string | null> {
-    const row = await this.db
+  private async queryBrowseCategoryCounts(): Promise<Partial<Record<OfferBrowseCategory, number>>> {
+    const { results } = await this.db
       .prepare(
-        `SELECT finished_at FROM import_runs
-         WHERE provider = 'lidl' AND status = 'SUCCESS' AND finished_at IS NOT NULL
-         ORDER BY finished_at DESC, started_at DESC LIMIT 1`,
+        `SELECT offer_browse_category, COUNT(*) AS count
+         FROM (
+           SELECT ep.offer_browse_category, o.product_id, o.valid_from, o.valid_until
+           FROM offers o
+           JOIN external_products ep ON ep.id = o.product_id
+           WHERE ep.supermarket_id = 'lidl'
+             AND (o.valid_until IS NULL OR o.valid_until >= ?)
+           GROUP BY ep.offer_browse_category, o.product_id, o.valid_from, o.valid_until
+         ) grouped_offers
+         GROUP BY offer_browse_category`,
       )
-      .first<{ finished_at: string }>();
-    return row?.finished_at ?? null;
+      .bind(this.today)
+      .all<{ offer_browse_category: OfferBrowseCategory; count: number }>();
+    return Object.fromEntries(results.map((row) => [row.offer_browse_category, row.count]));
   }
 }

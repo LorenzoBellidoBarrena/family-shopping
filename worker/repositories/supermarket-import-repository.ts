@@ -176,15 +176,16 @@ export class SupermarketImportRepository {
           `INSERT INTO external_products
              (id, supermarket_id, external_id, ean, name, normalized_name, brand, category,
               image_url, package_quantity, package_unit, last_seen_at, source_url, visual_category,
-              package_description)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              package_description, offer_browse_category)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(supermarket_id, external_id) DO UPDATE SET
              ean = excluded.ean, name = excluded.name, normalized_name = excluded.normalized_name,
              brand = excluded.brand, category = excluded.category, image_url = excluded.image_url,
              package_quantity = excluded.package_quantity, package_unit = excluded.package_unit,
              last_seen_at = excluded.last_seen_at, source_url = excluded.source_url,
              visual_category = excluded.visual_category,
-             package_description = excluded.package_description`,
+             package_description = excluded.package_description,
+             offer_browse_category = excluded.offer_browse_category`,
         )
         .bind(
           productId,
@@ -202,6 +203,7 @@ export class SupermarketImportRepository {
           product.sourceUrl,
           product.visualCategory,
           product.packageDescription ?? null,
+          product.offerBrowseCategory,
         ),
       this.db
         .prepare(

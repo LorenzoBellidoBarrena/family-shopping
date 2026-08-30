@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse, HttpHeaders, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, fromEvent, takeUntil, type Observable } from 'rxjs';
 import type {
   ApiErrorBody,
   BootstrapInput,
@@ -11,6 +11,7 @@ import type {
   LoyaltyProgramCode,
   LoyaltyStatus,
   ListOfferMatchesResponse,
+  OfferBrowseCategory,
   OfferSupermarketId,
   OffersResponse,
   PairingConsumeInput,
@@ -71,16 +72,28 @@ export class ShoppingApiService {
     );
   }
 
-  getOffers(supermarket?: OfferSupermarketId): Promise<OffersResponse> {
-    const params = supermarket ? new HttpParams().set('supermarket', supermarket) : undefined;
+  getOffers(
+    supermarket?: OfferSupermarketId,
+    category?: OfferBrowseCategory,
+    signal?: AbortSignal,
+  ): Promise<OffersResponse> {
+    let params = new HttpParams();
+    if (supermarket) params = params.set('supermarket', supermarket);
+    if (category) params = params.set('category', category);
     return this.request(
-      firstValueFrom(this.http.get<OffersResponse>('/api/offers', { ...this.auth(), params })),
+      this.abortableFirst(
+        this.http.get<OffersResponse>('/api/offers', { ...this.auth(), params }),
+        signal,
+      ),
     );
   }
 
-  getListOfferMatches(): Promise<ListOfferMatchesResponse> {
+  getListOfferMatches(signal?: AbortSignal): Promise<ListOfferMatchesResponse> {
     return this.request(
-      firstValueFrom(this.http.get<ListOfferMatchesResponse>('/api/offers/for-list', this.auth())),
+      this.abortableFirst(
+        this.http.get<ListOfferMatchesResponse>('/api/offers/for-list', this.auth()),
+        signal,
+      ),
     );
   }
 
@@ -193,6 +206,12 @@ export class ShoppingApiService {
   private auth(): { headers: HttpHeaders } {
     const token = this.tokens.token();
     return { headers: new HttpHeaders({ authorization: `Bearer ${token ?? ''}` }) };
+  }
+
+  private abortableFirst<T>(source: Observable<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return firstValueFrom(source);
+    if (signal.aborted) return Promise.reject(new DOMException('Request aborted', 'AbortError'));
+    return firstValueFrom(source.pipe(takeUntil(fromEvent(signal, 'abort'))));
   }
 
   private async request<T>(promise: Promise<T>): Promise<T> {

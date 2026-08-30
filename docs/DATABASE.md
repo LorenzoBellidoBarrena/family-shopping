@@ -31,6 +31,20 @@ de pruebas oficial de Workers y D1 local.
 Un índice único parcial sobre `shopping_cycles(household_id) WHERE status = 'ACTIVE'` garantiza en
 la propia base que cada hogar tenga como máximo un ciclo activo.
 
+## Categorías de navegación de ofertas e índices 0010
+
+`0010_offer_browse_categories_and_query_indexes.sql` añade a `external_products` la columna estable
+`offer_browse_category`, con default/backfill seguro `OTHER`. Es independiente de `visual_category`
+(`ProductCategory` familiar) y de `category` (jerarquía comercial del proveedor). Los códigos son
+`FOOD`, `DRINKS`, `FRESH`, `CLEANING`, `PERSONAL_CARE`, `HOME`, `GARDEN`, `DIY`, `CLOTHING`, `BABY`,
+`PETS`, `ELECTRONICS` y `OTHER`.
+
+`EXPLAIN QUERY PLAN` justificó tres accesos nuevos: filtro compuesto de producto por supermercado y
+categoría, último precio por producto/tienda y último import correcto. Por ello 0010 crea
+`external_products_supermarket_browse_idx`, `product_prices_latest_store_idx`,
+`product_prices_latest_product_idx` e `import_runs_success_finished_idx`. El toggle continúa usando
+la PK de `shopping_items` y `one_active_cycle_per_household_idx`; no consulta ninguna tabla comercial.
+
 ## Cantidades
 
 Las cantidades se reciben y devuelven como texto decimal, por ejemplo `"1.5"`. D1 guarda

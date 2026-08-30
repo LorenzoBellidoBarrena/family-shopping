@@ -4,6 +4,7 @@ import {
   GEOGRAPHIC_SCOPES,
   type ImportedProduct,
 } from '../domain/supermarket-import';
+import { isOfferBrowseCategory } from '../../src/shared/offer-browse-category';
 
 const validDate = (value: string | null): boolean => {
   if (value === null) return true;
@@ -47,7 +48,8 @@ export const validateImportedProduct = (product: ImportedProduct): ImportedProdu
   }
   if (
     !OFFER_CHANNELS.includes(product.channel) ||
-    !GEOGRAPHIC_SCOPES.includes(product.geographicScope)
+    !GEOGRAPHIC_SCOPES.includes(product.geographicScope) ||
+    !isOfferBrowseCategory(product.offerBrowseCategory)
   ) {
     throw new Error('IMPORT_INVALID_SCOPE');
   }

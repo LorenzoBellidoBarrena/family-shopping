@@ -1,4 +1,5 @@
 import type { ProductCategory } from '../../src/shared/product-category';
+import type { OfferBrowseCategory } from '../../src/shared/offer-browse-category';
 
 export const OFFER_TYPES = [
   'DIRECT_DISCOUNT',
@@ -41,6 +42,7 @@ export interface ImportedProduct {
   brand: string | null;
   commercialCategory: string | null;
   visualCategory: ProductCategory;
+  offerBrowseCategory: OfferBrowseCategory;
   imageUrl: string | null;
   packageQuantity: number | null;
   packageUnit: string | null;

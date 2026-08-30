@@ -1,13 +1,10 @@
-import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { computed, DestroyRef, effect, inject, Injectable, signal } from '@angular/core';
 import type {
   BootstrapInput,
   ClearAction,
-  CatalogOffer,
   ItemInput,
   HouseholdLoyaltyProgram,
   LoyaltyStatus,
-  ShoppingItemOfferMatch,
-  OfferSupermarketId,
   PairingDetails,
   ProductPreference,
   ShoppingCycle,
@@ -29,7 +26,12 @@ export class ShoppingStore {
   private readonly cache = inject(OfflineCacheService);
   private readonly network = inject(NetworkStatusService);
   private readonly realtime = inject(RealtimeService);
+  private readonly destroyRef = inject(DestroyRef);
   private suggestionRequest = 0;
+  private suggestionTimer: ReturnType<typeof setTimeout> | null = null;
+  private suggestionInFlight = false;
+  private queuedSuggestion: { request: number; query: string } | null = null;
+  private habitRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private started = false;
   private reconcileRequested = false;
 
@@ -37,20 +39,13 @@ export class ShoppingStore {
   private readonly availableSupermarkets = signal<Supermarket[]>([]);
   private readonly habitualProducts = signal<ProductPreference[]>([]);
   private readonly currentSuggestions = signal<ProductPreference[]>([]);
-  private readonly currentOffers = signal<CatalogOffer[]>([]);
-  private readonly currentOfferMatches = signal<ShoppingItemOfferMatch[]>([]);
-  private readonly unmatchedOfferItemCountState = signal(0);
-  private readonly offersLoadingState = signal(false);
-  private readonly offersPartialState = signal(false);
-  private readonly offersModeState = signal<'DEMO' | 'REAL'>('DEMO');
-  private readonly offersLastUpdatedState = signal<string | null>(null);
   private readonly loyaltyProgramsState = signal<HouseholdLoyaltyProgram[]>([
     { program: 'LIDL_PLUS', status: 'UNKNOWN' },
   ]);
   private readonly loyaltyLoadingState = signal(false);
   private readonly loyaltySavingState = signal(false);
   private readonly loyaltyErrorState = signal<string | null>(null);
-  private lastOfferFilter: OfferSupermarketId | undefined;
+  private readonly listVersionState = signal(0);
   private readonly loadingState = signal(true);
   private readonly busyState = signal(false);
   private readonly syncingState = signal(false);
@@ -63,13 +58,7 @@ export class ShoppingStore {
   readonly supermarkets = this.availableSupermarkets.asReadonly();
   readonly habits = this.habitualProducts.asReadonly();
   readonly suggestions = this.currentSuggestions.asReadonly();
-  readonly offers = this.currentOffers.asReadonly();
-  readonly offerMatches = this.currentOfferMatches.asReadonly();
-  readonly unmatchedOfferItemCount = this.unmatchedOfferItemCountState.asReadonly();
-  readonly offersLoading = this.offersLoadingState.asReadonly();
-  readonly offersPartial = this.offersPartialState.asReadonly();
-  readonly offersMode = this.offersModeState.asReadonly();
-  readonly offersLastUpdatedAt = this.offersLastUpdatedState.asReadonly();
+  readonly listVersion = this.listVersionState.asReadonly();
   readonly loyaltyPrograms = this.loyaltyProgramsState.asReadonly();
   readonly loyaltyLoading = this.loyaltyLoadingState.asReadonly();
   readonly loyaltySaving = this.loyaltySavingState.asReadonly();
@@ -96,6 +85,10 @@ export class ShoppingStore {
   readonly pendingCount = computed(() => this.items().filter((item) => !item.checked).length);
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.cancelSuggestionSearch();
+      if (this.habitRefreshTimer) clearTimeout(this.habitRefreshTimer);
+    });
     effect(() => {
       if (this.network.online() && this.started && this.tokens.hasToken()) void this.reconcile();
     });
@@ -180,38 +173,6 @@ export class ShoppingStore {
     }
   }
 
-  async loadOffers(supermarket?: OfferSupermarketId): Promise<void> {
-    if (this.offline() || this.offersLoadingState()) return;
-    this.offersLoadingState.set(true);
-    this.lastOfferFilter = supermarket;
-    this.errorState.set(null);
-    this.errorCodeState.set(null);
-    try {
-      let matchingFailed = false;
-      const matchingPromise =
-        supermarket === undefined || supermarket === 'lidl'
-          ? this.api.getListOfferMatches().catch(() => {
-              matchingFailed = true;
-              return null;
-            })
-          : Promise.resolve(null);
-      const [result, matching] = await Promise.all([
-        this.api.getOffers(supermarket),
-        matchingPromise,
-      ]);
-      this.currentOffers.set(result.offers);
-      this.currentOfferMatches.set(matching?.matchedItems ?? []);
-      this.unmatchedOfferItemCountState.set(matching?.unmatchedItems.length ?? 0);
-      this.offersPartialState.set(result.partial || matchingFailed);
-      this.offersModeState.set(result.mode);
-      this.offersLastUpdatedState.set(result.lastUpdatedAt);
-    } catch (error) {
-      this.handleError(error);
-    } finally {
-      this.offersLoadingState.set(false);
-    }
-  }
-
   async setLidlPlusStatus(status: Exclude<LoyaltyStatus, 'UNKNOWN'>): Promise<void> {
     if (this.offline() || this.loyaltySavingState()) return;
     this.loyaltySavingState.set(true);
@@ -219,45 +180,12 @@ export class ShoppingStore {
     try {
       const setting = await this.api.setLoyaltyProgram('LIDL_PLUS', status);
       this.updateLoyaltySetting(setting);
-      if (this.currentOffers().length > 0 || this.currentOfferMatches().length > 0) {
-        await this.loadOffers(this.lastOfferFilter);
-      }
     } catch (error) {
       this.loyaltyErrorState.set(
         error instanceof Error ? error.message : 'No se pudo guardar la configuración.',
       );
     } finally {
       this.loyaltySavingState.set(false);
-    }
-  }
-
-  async confirmOfferMatch(itemId: string, externalProductId: string): Promise<void> {
-    if (this.offline() || this.offersLoadingState()) return;
-    this.offersLoadingState.set(true);
-    try {
-      await this.api.confirmProductMatch(itemId, externalProductId);
-      const matching = await this.api.getListOfferMatches();
-      this.currentOfferMatches.set(matching.matchedItems);
-      this.unmatchedOfferItemCountState.set(matching.unmatchedItems.length);
-    } catch (error) {
-      this.handleError(error);
-    } finally {
-      this.offersLoadingState.set(false);
-    }
-  }
-
-  async dismissOfferMatch(itemId: string): Promise<void> {
-    if (this.offline() || this.offersLoadingState()) return;
-    this.offersLoadingState.set(true);
-    try {
-      await this.api.dismissProductMatch(itemId);
-      const matching = await this.api.getListOfferMatches();
-      this.currentOfferMatches.set(matching.matchedItems);
-      this.unmatchedOfferItemCountState.set(matching.unmatchedItems.length);
-    } catch (error) {
-      this.handleError(error);
-    } finally {
-      this.offersLoadingState.set(false);
     }
   }
 
@@ -274,6 +202,8 @@ export class ShoppingStore {
     )?.category;
     const now = new Date().toISOString();
     const optimisticId = `optimistic-${crypto.randomUUID()}`;
+    const category =
+      input.category ?? learnedCategory ?? classifyNormalizedProductName(normalizedName);
     const optimistic: ShoppingItem = {
       id: optimisticId,
       shoppingCycleId: previousCycle.id,
@@ -282,7 +212,7 @@ export class ShoppingStore {
       quantity: input.quantity ?? '1',
       unit: input.unit ?? 'unidad',
       supermarketId: input.supermarketId ?? null,
-      category: input.category ?? learnedCategory ?? classifyNormalizedProductName(normalizedName),
+      category,
       checked: false,
       sortOrder: Math.max(0, ...previousCycle.items.map((item) => item.sortOrder)) + 1000,
       createdAt: now,
@@ -296,7 +226,7 @@ export class ShoppingStore {
         items.map((current) => (current.id === optimisticId ? item : current)),
       );
       this.persistCycleSafely();
-      void this.refreshHabits();
+      this.scheduleHabitRefresh();
       return true;
     } catch (error) {
       this.currentCycle.set(previousCycle);
@@ -337,7 +267,7 @@ export class ShoppingStore {
       const updated = await this.api.updateItem(itemId, input);
       this.updateItems((items) => items.map((item) => (item.id === itemId ? updated : item)));
       this.persistCycleSafely();
-      void this.refreshHabits();
+      this.scheduleHabitRefresh();
       return true;
     } catch (error) {
       this.currentCycle.set(previousCycle);
@@ -414,12 +344,18 @@ export class ShoppingStore {
   }
 
   async complete(): Promise<boolean> {
-    return this.runOnline(async () => this.currentCycle.set(await this.api.complete()));
+    return this.runOnline(async () => {
+      this.currentCycle.set(await this.api.complete());
+      this.listVersionState.update((version) => version + 1);
+    });
   }
 
   async clear(action: ClearAction): Promise<boolean> {
     if (action === 'CANCEL') return true;
-    return this.runOnline(async () => this.currentCycle.set(await this.api.clear(action)));
+    return this.runOnline(async () => {
+      this.currentCycle.set(await this.api.clear(action));
+      this.listVersionState.update((version) => version + 1);
+    });
   }
 
   async reconcile(): Promise<void> {
@@ -444,6 +380,7 @@ export class ShoppingStore {
         await this.cache.removeToggle(operation.itemId);
       }
       this.currentCycle.set(canonical);
+      this.listVersionState.update((version) => version + 1);
       await this.cache.saveCycle(canonical);
       await this.updatePendingCount();
       this.cachedState.set(false);
@@ -463,22 +400,25 @@ export class ShoppingStore {
     }
   }
 
-  async searchSuggestions(query: string): Promise<void> {
+  searchSuggestions(query: string): void {
     const request = ++this.suggestionRequest;
-    if (query.trim().length < 2 || this.offline()) {
+    const normalizedQuery = query.trim();
+    this.cancelSuggestionTimer();
+    if (normalizedQuery.length < 2 || this.offline()) {
+      this.queuedSuggestion = null;
       this.currentSuggestions.set([]);
       return;
     }
-    try {
-      const suggestions = await this.api.getSuggestions(query.trim(), 5);
-      if (request === this.suggestionRequest) this.currentSuggestions.set(suggestions);
-    } catch {
-      if (request === this.suggestionRequest) this.currentSuggestions.set([]);
-    }
+    this.queuedSuggestion = { request, query: normalizedQuery };
+    this.suggestionTimer = setTimeout(() => {
+      this.suggestionTimer = null;
+      void this.runLatestSuggestionSearch();
+    }, 250);
   }
 
   clearSuggestions(): void {
     this.suggestionRequest += 1;
+    this.cancelSuggestionSearch();
     this.currentSuggestions.set([]);
   }
 
@@ -488,6 +428,11 @@ export class ShoppingStore {
   }
 
   forgetDevice(): void {
+    this.clearSuggestions();
+    if (this.habitRefreshTimer) {
+      clearTimeout(this.habitRefreshTimer);
+      this.habitRefreshTimer = null;
+    }
     this.realtime.disconnect();
     this.tokens.clear();
     this.currentCycle.set(null);
@@ -520,10 +465,10 @@ export class ShoppingStore {
     const [supermarkets, habits] = await Promise.all([
       this.api.getSupermarkets(),
       this.api.getSuggestions('', 6),
+      this.loadLoyaltyPrograms(),
     ]);
     this.availableSupermarkets.set(supermarkets);
     this.habitualProducts.set(habits);
-    await this.loadLoyaltyPrograms();
   }
 
   private async loadLoyaltyPrograms(): Promise<void> {
@@ -550,13 +495,11 @@ export class ShoppingStore {
 
   private async refreshLoyaltyAfterRemoteChange(): Promise<void> {
     await this.loadLoyaltyPrograms();
-    if (this.currentOffers().length > 0 || this.currentOfferMatches().length > 0) {
-      await this.loadOffers(this.lastOfferFilter);
-    }
   }
 
   private updateItems(update: (items: ShoppingItem[]) => ShoppingItem[]): void {
     this.currentCycle.update((cycle) => (cycle ? { ...cycle, items: update(cycle.items) } : cycle));
+    this.listVersionState.update((version) => version + 1);
   }
 
   private async refreshHabits(): Promise<void> {
@@ -565,6 +508,42 @@ export class ShoppingStore {
     } catch {
       // The mutation already succeeded; habitual suggestions can refresh later.
     }
+  }
+
+  private scheduleHabitRefresh(): void {
+    if (this.habitRefreshTimer) clearTimeout(this.habitRefreshTimer);
+    this.habitRefreshTimer = setTimeout(() => {
+      this.habitRefreshTimer = null;
+      void this.refreshHabits();
+    }, 750);
+  }
+
+  private async runLatestSuggestionSearch(): Promise<void> {
+    if (this.suggestionInFlight) return;
+    const queued = this.queuedSuggestion;
+    this.queuedSuggestion = null;
+    if (!queued || queued.request !== this.suggestionRequest) return;
+    this.suggestionInFlight = true;
+    try {
+      const suggestions = await this.api.getSuggestions(queued.query, 5);
+      if (queued.request === this.suggestionRequest) this.currentSuggestions.set(suggestions);
+    } catch {
+      if (queued.request === this.suggestionRequest) this.currentSuggestions.set([]);
+    } finally {
+      this.suggestionInFlight = false;
+      if (this.queuedSuggestion) void this.runLatestSuggestionSearch();
+    }
+  }
+
+  private cancelSuggestionTimer(): void {
+    if (!this.suggestionTimer) return;
+    clearTimeout(this.suggestionTimer);
+    this.suggestionTimer = null;
+  }
+
+  private cancelSuggestionSearch(): void {
+    this.cancelSuggestionTimer();
+    this.queuedSuggestion = null;
   }
 
   private async toggleOffline(itemId: string): Promise<boolean> {

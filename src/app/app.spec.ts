@@ -12,6 +12,7 @@ import type {
   LoyaltyStatus,
   ListOfferMatchesResponse,
   OfferSupermarketId,
+  OfferBrowseCategory,
   OffersResponse,
   PairingConsumeInput,
   ProductPreference,
@@ -102,6 +103,7 @@ class FakeShoppingApi {
       brand: 'Fixture Lidl',
       category: 'Lácteos',
       visualCategory: 'DAIRY',
+      offerBrowseCategory: 'FOOD',
       packageLabel: '1 l',
       normalPriceCents: 105,
       offerPriceCents: 89,
@@ -140,17 +142,26 @@ class FakeShoppingApi {
   readonly getSuggestions = vi.fn(async (query = '') =>
     this.habits.filter((habit) => habit.normalizedName.startsWith(query.toLowerCase())),
   );
-  readonly getOffers = vi.fn(async (supermarket?: OfferSupermarketId): Promise<OffersResponse> => {
-    const offers = supermarket
-      ? this.offerData.filter((offer) => offer.supermarketId === supermarket)
-      : this.offerData;
-    return {
-      offers: offers.map((offer) => ({ ...offer, pricing: this.offerPricing(offer) })),
-      partial: false,
-      mode: this.offersMode,
-      lastUpdatedAt: '2026-08-28T00:00:00.000Z',
-    };
-  });
+  readonly getOffers = vi.fn(
+    async (
+      supermarket?: OfferSupermarketId,
+      _category?: OfferBrowseCategory,
+      _signal?: AbortSignal,
+    ): Promise<OffersResponse> => {
+      void _category;
+      void _signal;
+      const offers = supermarket
+        ? this.offerData.filter((offer) => offer.supermarketId === supermarket)
+        : this.offerData;
+      return {
+        offers: offers.map((offer) => ({ ...offer, pricing: this.offerPricing(offer) })),
+        partial: false,
+        mode: this.offersMode,
+        lastUpdatedAt: '2026-08-28T00:00:00.000Z',
+        categories: [{ code: 'FOOD', label: 'Comida', emoji: '🍎', count: offers.length }],
+      };
+    },
+  );
   readonly getListOfferMatches = vi.fn(async (): Promise<ListOfferMatchesResponse> => ({
     matchedItems: [
       {
@@ -439,6 +450,22 @@ describe('Shopping list interface', () => {
     expect(fixture.nativeElement.textContent).toContain('Yogur');
   });
 
+  it('debounces rapid product suggestion searches', async () => {
+    const callsBeforeTyping = api.getSuggestions.mock.calls.length;
+    const input = fixture.nativeElement.querySelector('#quick-name') as HTMLInputElement;
+
+    for (const value of ['Le', 'Lec', 'Lech', 'Leche']) {
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await settle();
+
+    expect(api.getSuggestions.mock.calls.length - callsBeforeTyping).toBe(1);
+    expect(api.getSuggestions).toHaveBeenLastCalledWith('Leche', 5);
+  });
+
   it('renders a new product before the server response arrives', async () => {
     let resolveRequest!: (created: ShoppingItem) => void;
     api.addItem.mockImplementationOnce(
@@ -529,7 +556,7 @@ describe('Shopping list interface', () => {
     await settle();
 
     const card = fixture.nativeElement.querySelector('.match-card') as HTMLElement;
-    expect(api.getOffers).toHaveBeenCalledWith(undefined);
+    expect(api.getOffers.mock.calls[0]?.slice(0, 2)).toEqual([undefined, undefined]);
     expect(card.textContent).toContain('Leche entera 1 litro');
     expect(card.textContent).toContain('Leche');
     expect(card.textContent).toContain('Necesitarías 6 envases');
@@ -539,9 +566,43 @@ describe('Shopping list interface', () => {
 
     button('DIA').click();
     await settle();
-    expect(api.getOffers).toHaveBeenLastCalledWith('dia');
+    expect(api.getOffers.mock.calls.at(-1)?.slice(0, 2)).toEqual(['dia', undefined]);
     expect(fixture.nativeElement.querySelectorAll('.offer-card')).toHaveLength(0);
     expect(fixture.nativeElement.querySelectorAll('.match-card')).toHaveLength(0);
+  });
+
+  it('cancels offer requests when returning to the list', async () => {
+    let requestSignal: AbortSignal | undefined;
+    api.getOffers.mockImplementationOnce(
+      (_supermarket, _category, signal) =>
+        new Promise<OffersResponse>((_resolve, reject) => {
+          requestSignal = signal;
+          signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    );
+
+    button('％ Ofertas').click();
+    fixture.detectChanges();
+    button('☷ Lista').click();
+    await settle();
+
+    expect(requestSignal?.aborted).toBe(true);
+    expect(fixture.nativeElement.querySelector('.shopping-list')).not.toBeNull();
+  });
+
+  it('loads a selected offer category without refetching after list CRUD', async () => {
+    button('％ Ofertas').click();
+    await settle();
+    button('🍎 Comida 1').click();
+    await settle();
+    expect(api.getOffers.mock.calls.at(-1)?.slice(0, 2)).toEqual([undefined, 'FOOD']);
+
+    button('☷ Lista').click();
+    fixture.detectChanges();
+    const callsBefore = api.getOffers.mock.calls.length;
+    (fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement).click();
+    await settle();
+    expect(api.getOffers).toHaveBeenCalledTimes(callsBefore);
   });
 
   it('allows a suggested Lidl product to be confirmed without changing the list item', async () => {

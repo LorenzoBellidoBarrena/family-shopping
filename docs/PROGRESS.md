@@ -290,3 +290,37 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
 No se requiere ninguna acción de infraestructura. Conviene abrir la aplicación en ambos móviles y
 confirmar visualmente el emoji, el tachado y la actualización en tiempo real; `CARRY_PENDING` no se
 ejecutó sobre la lista personal y queda cubierto por las pruebas automatizadas.
+
+### Auditoría de rendimiento y categorías de ofertas — 30 de agosto de 2026
+
+La regresión no estaba dentro del CRUD: `/api/offers` volvía a leer el ciclo y hacía matching de
+cada oferta, mientras Angular mantenía en vuelo `/api/offers` y `/api/offers/for-list` después de
+regresar a Lista. En Wrangler local esas consultas competían por D1/workerd: el log observado pasó
+de POST de 2–5 s a PATCH de hasta 19,9 s bajo acumulación. El autocomplete también generaba una
+cola de búsquedas antes del debounce/coalescing.
+
+Se separaron `ShoppingStore` y `OffersStore`; salir de Ofertas aborta I/O, catálogo se cachea cinco
+minutos y matching sólo se invalida por versión de lista. `/api/offers` ya no consulta el ciclo ni
+ejecuta matching. Alta, edición, toggle y borrado tienen feedback optimista/rollback. La búsqueda se
+debouncea 250 ms, coalesce a una petición en vuelo y los hábitos se refrescan diferidos. En pruebas
+reales sin contención los POST observados bajaron a 143–191 ms; la respuesta visual es inmediata.
+
+La migración aditiva `0010_offer_browse_categories_and_query_indexes.sql` y
+`OfferBrowseCategory` están validadas en D1 local. El build inicial es 389,12 kB raw/100,86 kB
+transferido frente a 384,75 kB/99,72 kB anterior; no existe chunk lazy de Ofertas. El incremento de
+1,14 kB transferido corresponde a taxonomía, estado separado, cancelación y chips. Una prueba de
+integración inserta 1.000 ofertas y confirma que dos toggles siguen usando únicamente autenticación
+y el `UPDATE ... RETURNING` de lista.
+
+La migración 0010 se aplicó remotamente sin pendientes y preservó exactamente 1 hogar, 2
+dispositivos, 1 ciclo activo, 5 items, 5 preferencias, 53 productos Lidl y 84 ofertas. La versión
+`1e4b7403-95f4-4865-9fbe-51043809528d` publicó el bundle `main-STK7HXTJ.js` manteniendo
+`SUPERMARKET_FEATURE_ENABLED=true` y los Cron `0 3 * * *`/`0 4 * * *`. Smoke público: shell,
+`/pair`, manifest, service worker y salud `200`; API desconocida JSON `404`; Ofertas/matching sin
+token `401`; `/ws` sin upgrade `426`. El smoke CRUD autenticado y sincronización visual entre los
+dos móviles requiere al propietario porque los device tokens no se leen ni se registran.
+
+Tras el backfill remoto y antes del siguiente Cron, las tarjetas vigentes son: `OTHER` 24, `FRESH`
+11, `FOOD` 5, `PERSONAL_CARE` 3, `CLEANING` 3 y `DRINKS` 1. El siguiente import programado
+reclasificará mediante metadata actual y podrá incorporar las campañas de Jardín; no se lanzó un
+import remoto manual en esta auditoría.

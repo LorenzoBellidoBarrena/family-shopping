@@ -263,6 +263,48 @@ describe('production hardening', () => {
 });
 
 describe('shopping list domain', () => {
+  it('keeps toggle isolated when the supermarket catalog contains 1,000 offers', async () => {
+    const { token } = await bootstrap();
+    const item = await addItem(token, 'Leche');
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO stores
+           (id, supermarket_id, external_id, name, address, city, postal_code, active)
+         VALUES ('perf-store', 'lidl', 'perf-store', 'Ámbito de prueba',
+                 'Ámbito regional', 'Badajoz', '06000', 1)`,
+      ),
+      testEnv.DB.prepare(
+        `WITH RECURSIVE sequence(value) AS (
+           SELECT 1 UNION ALL SELECT value + 1 FROM sequence WHERE value < 1000
+         )
+         INSERT INTO external_products
+           (id, supermarket_id, external_id, name, normalized_name, visual_category,
+            offer_browse_category, last_seen_at)
+         SELECT 'perf-product-' || value, 'lidl', 'perf-' || value,
+                'Producto ' || value, 'producto ' || value, 'OTHER', 'OTHER',
+                '2026-08-30T00:00:00.000Z'
+         FROM sequence`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO offers
+           (id, product_id, store_id, normal_price_cents, offer_price_cents,
+            promotion_type, valid_from, valid_until, source_url,
+            requires_loyalty_card, observed_at)
+         SELECT 'perf-offer-' || substr(id, 14), id, 'perf-store', 200, 150,
+                'Oferta de prueba', '2026-08-01', '2026-09-30',
+                'https://www.lidl.es/', 0, '2026-08-30T00:00:00.000Z'
+         FROM external_products WHERE id LIKE 'perf-product-%'`,
+      ),
+    ]);
+
+    const offerCount = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count FROM offers WHERE id LIKE 'perf-offer-%'`,
+    ).first<{ count: number }>();
+    expect(offerCount?.count).toBe(1000);
+    expect((await toggleItem(token, item.id)).checked).toBe(true);
+    expect((await toggleItem(token, item.id)).checked).toBe(false);
+  });
+
   it('adds a product with precise quantity and a stable sort order', async () => {
     const { token } = await bootstrap();
     const item = await addItem(token, 'Leche entera', {
@@ -625,7 +667,7 @@ describe('supermarket offers module', () => {
     });
   });
 
-  it('isolates fixture providers, filters by chain, and relates offers to the active list', async () => {
+  it('isolates fixture providers and filters by chain without coupling catalog to the list', async () => {
     const { token } = await bootstrap();
     await addItem(token, 'Leche');
     const all = await api('/api/offers', { token });
@@ -646,11 +688,14 @@ describe('supermarket offers module', () => {
     expect(all.status).toBe(200);
     expect(result.partial).toBe(false);
     expect(result.offers).toHaveLength(8);
-    expect(result.offers[0]).toMatchObject({
+    const lidlMilk = result.offers.find(
+      (offer) => offer.supermarketId === 'lidl' && offer.productName === 'Leche entera 1 litro',
+    );
+    expect(lidlMilk).toMatchObject({
       supermarketId: 'lidl',
       productName: 'Leche entera 1 litro',
-      relatedToList: true,
-      matchedItemNames: ['Leche'],
+      relatedToList: false,
+      matchedItemNames: [],
       catalogAvailability: 'PUBLISHED',
       fixture: true,
     });

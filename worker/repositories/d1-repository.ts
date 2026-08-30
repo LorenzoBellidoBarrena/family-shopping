@@ -319,15 +319,6 @@ export class D1Repository {
     };
   }
 
-  private async getActiveCycleId(householdId: string): Promise<string> {
-    const cycle = await this.db
-      .prepare(`SELECT id FROM shopping_cycles WHERE household_id = ? AND status = 'ACTIVE'`)
-      .bind(householdId)
-      .first<{ id: string }>();
-    if (!cycle) throw notFound('No existe un ciclo de compra activo.');
-    return cycle.id;
-  }
-
   async getActiveItem(householdId: string, itemId: string): Promise<ShoppingItem> {
     const row = await this.db
       .prepare(
@@ -351,37 +342,37 @@ export class D1Repository {
     values: ItemValues,
     now: string,
   ): Promise<ShoppingItem> {
-    const cycleId = await this.getActiveCycleId(householdId);
     const results = await this.db.batch<ItemRow>([
       this.db
         .prepare(
           `INSERT INTO shopping_items
              (id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
               supermarket_id, category, checked, sort_order, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0,
+           SELECT ?, c.id, ?, ?, ?, ?, ?, ?, 0,
              (SELECT COALESCE(MAX(sort_order), 0) + 1000 FROM shopping_items
-              WHERE shopping_cycle_id = ?), ?, ?)
+              WHERE shopping_cycle_id = c.id), ?, ?
+           FROM shopping_cycles c
+           WHERE c.household_id = ? AND c.status = 'ACTIVE'
            RETURNING id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
                      supermarket_id, category, checked, sort_order, created_at, updated_at,
                      checked_at`,
         )
         .bind(
           itemId,
-          cycleId,
           values.name,
           values.normalizedName,
           values.quantityMilli,
           values.unit,
           values.supermarketId,
           values.category,
-          cycleId,
           now,
           now,
+          householdId,
         ),
       this.preferenceStatement(householdId, preferenceId, values, now, true),
     ]);
     const row = results[0]?.results[0];
-    if (!row) throw new Error('Unable to create shopping item');
+    if (!row) throw notFound('No existe un ciclo de compra activo.');
     return mapItem(row);
   }
 

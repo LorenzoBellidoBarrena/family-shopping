@@ -1,4 +1,5 @@
 import { classifyNormalizedProductName } from '../../src/shared/product-category';
+import { classifyOfferBrowseCategory } from '../../src/shared/offer-browse-category';
 import type {
   ImportedOffer,
   ImportedProduct,
@@ -16,11 +17,18 @@ const ZAFRA_STORE_URL = 'https://www.lidl.es/s/es-ES/tiendas/zafra/c-torre-san-f
 const FLYER_API_ORIGIN = 'https://endpoints.leaflets.schwarz';
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 9_000;
-const MAX_CAMPAIGNS = 5;
-const MAX_DISCOVERED_CAMPAIGNS = 20;
-const FOOD_CAMPAIGN_SLUGS = [
+const MAX_CAMPAIGNS = 10;
+const MAX_DISCOVERED_CAMPAIGNS = 30;
+const CAMPAIGN_PRIORITIES = [
   'ofertas-semanales',
   'ofertas-proxima-semana',
+  'tus-otras-marcas-de-siempre',
+  'tus-otras-marcas-de-siempre-proxima-semana',
+  'limpieza-del-hogar-y-cuidado-de-la-ropa',
+  'jardin-de-lidl',
+  'jardin-poda-de-otono',
+  'parkside-30-cumpleanos-merch',
+  'tu-oasis-de-bienestar',
   'frescos-frutas-y-verduras',
   'frescos-carne',
   'frescos-pescado',
@@ -38,9 +46,7 @@ const finiteNumber = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 
 const isCampaignPath = (pathname: string): boolean =>
-  FOOD_CAMPAIGN_SLUGS.some((slug) =>
-    new RegExp(`^/c/${slug}/[as]\\d{5,12}/?$`, 'u').test(pathname),
-  );
+  /^\/c\/[a-z0-9-]{3,120}\/[as]\d{5,12}\/?$/u.test(pathname);
 
 const safeLidlUrl = (value: string): URL => {
   const url = new URL(value);
@@ -310,7 +316,7 @@ export class LidlProvider implements SupermarketImportProvider {
     const unique = [...new Set(links)];
     if (unique.length === 0) throw new Error('LIDL_CAMPAIGNS_MISSING');
     const priority = (url: string): number => {
-      const index = FOOD_CAMPAIGN_SLUGS.findIndex((slug) =>
+      const index = CAMPAIGN_PRIORITIES.findIndex((slug) =>
         new URL(url).pathname.includes(`/${slug}/`),
       );
       return index < 0 ? 999 : index;
@@ -381,6 +387,7 @@ export class LidlProvider implements SupermarketImportProvider {
       const baseCents = generalCents ?? (plus ? oldPriceCents(plus) : null) ?? plusCents;
       if (baseCents === null) continue;
       const channel = explicitChannel(raw);
+      if (channel === 'ONLINE') continue;
       const packageText =
         text(record(general?.['packaging'])?.['text']) ??
         text(record(plus?.['packaging'])?.['text']) ??
@@ -389,12 +396,6 @@ export class LidlProvider implements SupermarketImportProvider {
       const unit = general ? explicitUnitPrice(general) : null;
       const keyfacts = record(raw['keyfacts']);
       const commercialCategory = text(keyfacts?.['wonCategoryPrimary']) ?? text(raw['category']);
-      if (
-        commercialCategory &&
-        !normalizeProductName(commercialCategory).includes('comida y cerca de la comida')
-      ) {
-        continue;
-      }
       products.push({
         externalId,
         name,
@@ -423,6 +424,7 @@ export class LidlProvider implements SupermarketImportProvider {
     if (!product.externalId || !product.name.trim() || priceCents === null)
       throw new Error('LIDL_INVALID_PRODUCT');
     const normalizedName = normalizeProductName(product.name);
+    const visualCategory = classifyNormalizedProductName(normalizedName);
     return {
       externalId: product.externalId,
       ean: product.ean?.trim() || null,
@@ -430,7 +432,13 @@ export class LidlProvider implements SupermarketImportProvider {
       normalizedName,
       brand: product.brand?.trim() || null,
       commercialCategory: product.commercialCategory?.trim() || null,
-      visualCategory: classifyNormalizedProductName(normalizedName),
+      visualCategory,
+      offerBrowseCategory: classifyOfferBrowseCategory({
+        officialCategory: product.commercialCategory,
+        campaign: product.sourceUrl,
+        visualCategory,
+        normalizedName,
+      }),
       imageUrl: product.imageUrl?.trim() || null,
       packageQuantity: product.packageQuantity ?? null,
       packageUnit: product.packageUnit?.trim() || null,

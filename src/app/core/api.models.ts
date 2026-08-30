@@ -1,6 +1,8 @@
 import type { ProductCategory } from '../../shared/product-category';
+import type { OfferBrowseCategory } from '../../shared/offer-browse-category';
 
 export type { ProductCategory } from '../../shared/product-category';
+export type { OfferBrowseCategory } from '../../shared/offer-browse-category';
 
 export const UNITS = [
   'unidad',
@@ -93,6 +95,7 @@ export interface CatalogOffer {
   brand: string | null;
   category: string | null;
   visualCategory: ProductCategory;
+  offerBrowseCategory: OfferBrowseCategory;
   packageLabel: string | null;
   normalPriceCents: number | null;
   offerPriceCents: number;
@@ -123,6 +126,14 @@ export interface OffersResponse {
   partial: boolean;
   mode: 'DEMO' | 'REAL';
   lastUpdatedAt: string | null;
+  categories: OfferBrowseCategorySummary[];
+}
+
+export interface OfferBrowseCategorySummary {
+  code: OfferBrowseCategory;
+  label: string;
+  emoji: string;
+  count: number;
 }
 
 export type MatchConfidence = 'HIGH' | 'MEDIUM' | 'LOW';

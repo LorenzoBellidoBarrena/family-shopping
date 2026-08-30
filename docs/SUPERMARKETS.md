@@ -378,6 +378,29 @@ contraseña, tarjeta, QR ni otro identificador de Lidl.
 La persistencia usa códigos extensibles y admite en el futuro `CLUB_DIA` y `CLUB_CARREFOUR` sin
 nuevas columnas. Ninguno de esos programas ni proveedores se activa en esta fase.
 
+### Navegación por categorías y campañas no alimentarias
+
+`OfferBrowseCategory` constituye una tercera taxonomía: no reemplaza ni `ProductCategory` ni la
+categoría comercial de Lidl. La clasificación prioriza metadata/ruta oficial de campaña, después la
+familia visual y por último reglas locales por frases completas. Las coincidencias no usan
+subcadenas: por ejemplo, «estropajos» ya no puede activar accidentalmente «ropa».
+
+La portada oficial del 30 de agosto de 2026 publicó campañas de tienda para jardín, poda y Parkside,
+además de campañas semanales, próximas y de otras marcas. Discovery sigue limitado a `www.lidl.es`,
+paths `/c/<slug>/(a|s)<id>`, diez campañas, 2 MiB por respuesta, timeout de 9 segundos y un reintento.
+Productos marcados explícitamente como sólo online se omiten del ámbito regional de tienda.
+
+Una importación real local con el discovery ampliado terminó `PARTIAL` de forma segura: 94
+productos, 94 precios, 107 ofertas y una campaña sin producto estructurado. Los 94 productos vistos
+se distribuyeron en `FRESH` 22, `FOOD` 21, `GARDEN` 16, `CLEANING` 15, `PERSONAL_CARE` 11,
+`DRINKS` 6, `HOME` 2 y `OTHER` 1. La parcialidad no invalida las 94 filas correctas ni borra el
+último dataset. Jardín aportó 12 productos desde `jardin-de-lidl`, poda uno y Parkside tres. No hubo
+duplicados por `(supermarket_id, external_id)`.
+
+La API filtra la categoría en D1 y calcula todos los contadores con un único `GROUP BY`, agrupando
+las filas general y Lidl Plus de un producto/vigencia. Angular muestra chips horizontales,
+`🎯 De tu lista` primero y como máximo 24 tarjetas por bloque hasta pulsar «Ver más ofertas».
+
 Revisión D1 del 30 de agosto de 2026, por envase y en céntimos enteros:
 
 | Producto                  | Normal | Oferta | Lidl Plus | Efectivo OFF | Efectivo ON |
