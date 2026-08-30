@@ -4,6 +4,8 @@ import type {
   ClearAction,
   CatalogOffer,
   ItemInput,
+  HouseholdLoyaltyProgram,
+  LoyaltyStatus,
   ShoppingItemOfferMatch,
   OfferSupermarketId,
   PairingDetails,
@@ -42,6 +44,13 @@ export class ShoppingStore {
   private readonly offersPartialState = signal(false);
   private readonly offersModeState = signal<'DEMO' | 'REAL'>('DEMO');
   private readonly offersLastUpdatedState = signal<string | null>(null);
+  private readonly loyaltyProgramsState = signal<HouseholdLoyaltyProgram[]>([
+    { program: 'LIDL_PLUS', status: 'UNKNOWN' },
+  ]);
+  private readonly loyaltyLoadingState = signal(false);
+  private readonly loyaltySavingState = signal(false);
+  private readonly loyaltyErrorState = signal<string | null>(null);
+  private lastOfferFilter: OfferSupermarketId | undefined;
   private readonly loadingState = signal(true);
   private readonly busyState = signal(false);
   private readonly syncingState = signal(false);
@@ -61,6 +70,15 @@ export class ShoppingStore {
   readonly offersPartial = this.offersPartialState.asReadonly();
   readonly offersMode = this.offersModeState.asReadonly();
   readonly offersLastUpdatedAt = this.offersLastUpdatedState.asReadonly();
+  readonly loyaltyPrograms = this.loyaltyProgramsState.asReadonly();
+  readonly loyaltyLoading = this.loyaltyLoadingState.asReadonly();
+  readonly loyaltySaving = this.loyaltySavingState.asReadonly();
+  readonly loyaltyError = this.loyaltyErrorState.asReadonly();
+  readonly lidlPlusStatus = computed(
+    () =>
+      this.loyaltyProgramsState().find((setting) => setting.program === 'LIDL_PLUS')?.status ??
+      'UNKNOWN',
+  );
   readonly loading = this.loadingState.asReadonly();
   readonly busy = this.busyState.asReadonly();
   readonly syncing = this.syncingState.asReadonly();
@@ -165,6 +183,7 @@ export class ShoppingStore {
   async loadOffers(supermarket?: OfferSupermarketId): Promise<void> {
     if (this.offline() || this.offersLoadingState()) return;
     this.offersLoadingState.set(true);
+    this.lastOfferFilter = supermarket;
     this.errorState.set(null);
     this.errorCodeState.set(null);
     try {
@@ -190,6 +209,25 @@ export class ShoppingStore {
       this.handleError(error);
     } finally {
       this.offersLoadingState.set(false);
+    }
+  }
+
+  async setLidlPlusStatus(status: Exclude<LoyaltyStatus, 'UNKNOWN'>): Promise<void> {
+    if (this.offline() || this.loyaltySavingState()) return;
+    this.loyaltySavingState.set(true);
+    this.loyaltyErrorState.set(null);
+    try {
+      const setting = await this.api.setLoyaltyProgram('LIDL_PLUS', status);
+      this.updateLoyaltySetting(setting);
+      if (this.currentOffers().length > 0 || this.currentOfferMatches().length > 0) {
+        await this.loadOffers(this.lastOfferFilter);
+      }
+    } catch (error) {
+      this.loyaltyErrorState.set(
+        error instanceof Error ? error.message : 'No se pudo guardar la configuración.',
+      );
+    } finally {
+      this.loyaltySavingState.set(false);
     }
   }
 
@@ -456,6 +494,7 @@ export class ShoppingStore {
     this.availableSupermarkets.set([]);
     this.habitualProducts.set([]);
     this.currentSuggestions.set([]);
+    this.loyaltyProgramsState.set([{ program: 'LIDL_PLUS', status: 'UNKNOWN' }]);
     this.errorState.set(null);
     this.errorCodeState.set(null);
     this.started = false;
@@ -469,7 +508,10 @@ export class ShoppingStore {
 
   private startRealtime(): void {
     this.realtime.connect(
-      () => void this.reconcile(),
+      (event) => {
+        if (event.type === 'SETTINGS_UPDATED') void this.refreshLoyaltyAfterRemoteChange();
+        else void this.reconcile();
+      },
       () => void this.reconcile(),
     );
   }
@@ -481,6 +523,36 @@ export class ShoppingStore {
     ]);
     this.availableSupermarkets.set(supermarkets);
     this.habitualProducts.set(habits);
+    await this.loadLoyaltyPrograms();
+  }
+
+  private async loadLoyaltyPrograms(): Promise<void> {
+    if (!this.network.online()) return;
+    this.loyaltyLoadingState.set(true);
+    this.loyaltyErrorState.set(null);
+    try {
+      this.loyaltyProgramsState.set(await this.api.getLoyaltyPrograms());
+    } catch (error) {
+      this.loyaltyErrorState.set(
+        error instanceof Error ? error.message : 'No se pudo cargar la configuración.',
+      );
+    } finally {
+      this.loyaltyLoadingState.set(false);
+    }
+  }
+
+  private updateLoyaltySetting(setting: HouseholdLoyaltyProgram): void {
+    this.loyaltyProgramsState.update((settings) => [
+      ...settings.filter((current) => current.program !== setting.program),
+      setting,
+    ]);
+  }
+
+  private async refreshLoyaltyAfterRemoteChange(): Promise<void> {
+    await this.loadLoyaltyPrograms();
+    if (this.currentOffers().length > 0 || this.currentOfferMatches().length > 0) {
+      await this.loadOffers(this.lastOfferFilter);
+    }
   }
 
   private updateItems(update: (items: ShoppingItem[]) => ShoppingItem[]): void {

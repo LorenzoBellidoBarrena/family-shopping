@@ -117,6 +117,55 @@ button:focus-visible {
   margin-top: 0.5rem;
 }
 
+.loyalty-settings {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.loyalty-settings > div:first-child {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.loyalty-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.loyalty-choice button {
+  min-height: 2.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.8rem;
+  background: #fff;
+  color: var(--text);
+  font-weight: 750;
+}
+
+.loyalty-choice .loyalty-choice--selected {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.loyalty-status,
+.settings-error {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.loyalty-status {
+  color: var(--brand-strong);
+}
+
+.settings-error {
+  color: var(--danger);
+}
+
 .setup-card form {
   display: grid;
   gap: 0.8rem;
@@ -383,6 +432,27 @@ button:disabled {
 .package-fit strong,
 .estimated-costs strong {
   color: var(--text);
+}
+
+.effective-price {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.65rem;
+  align-items: baseline;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.75rem;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.effective-price span,
+.loyalty-config-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.loyalty-config-hint {
+  line-height: 1.4;
 }
 
 .package-fit[data-fit='INCOMPATIBLE'] strong {

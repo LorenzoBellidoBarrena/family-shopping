@@ -7,6 +7,9 @@ import type {
   BootstrapResponse,
   ClearAction,
   ItemInput,
+  HouseholdLoyaltyProgram,
+  LoyaltyProgramCode,
+  LoyaltyStatus,
   ListOfferMatchesResponse,
   OfferSupermarketId,
   OffersResponse,
@@ -78,6 +81,32 @@ export class ShoppingApiService {
   getListOfferMatches(): Promise<ListOfferMatchesResponse> {
     return this.request(
       firstValueFrom(this.http.get<ListOfferMatchesResponse>('/api/offers/for-list', this.auth())),
+    );
+  }
+
+  getLoyaltyPrograms(): Promise<HouseholdLoyaltyProgram[]> {
+    return this.request(
+      firstValueFrom(
+        this.http.get<{ loyaltyPrograms: HouseholdLoyaltyProgram[] }>(
+          '/api/settings/loyalty-programs',
+          this.auth(),
+        ),
+      ).then(({ loyaltyPrograms }) => loyaltyPrograms),
+    );
+  }
+
+  setLoyaltyProgram(
+    program: LoyaltyProgramCode,
+    status: LoyaltyStatus,
+  ): Promise<HouseholdLoyaltyProgram> {
+    return this.request(
+      firstValueFrom(
+        this.http.put<HouseholdLoyaltyProgram>(
+          `/api/settings/loyalty-programs/${program}`,
+          { status },
+          this.auth(),
+        ),
+      ),
     );
   }
 

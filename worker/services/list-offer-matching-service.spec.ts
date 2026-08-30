@@ -4,6 +4,7 @@ import type { Device } from '../domain/types';
 import { LidlD1OffersProvider } from '../providers/lidl-d1-offers-provider';
 import { D1Repository } from '../repositories/d1-repository';
 import { ProductMatchRepository } from '../repositories/product-match-repository';
+import { HouseholdLoyaltyRepository } from '../repositories/household-loyalty-repository';
 import { ListOfferMatchingService } from './list-offer-matching-service';
 
 interface MatchTestEnv {
@@ -106,6 +107,7 @@ const service = (): ListOfferMatchingService =>
     new D1Repository(testEnv.DB),
     new ProductMatchRepository(testEnv.DB),
     new LidlD1OffersProvider(testEnv.DB, today),
+    new HouseholdLoyaltyRepository(testEnv.DB),
   );
 
 beforeEach(async () => {
@@ -167,7 +169,74 @@ describe('ListOfferMatchingService', () => {
       offerPriceCents: 85,
       lidlPlusPriceCents: 75,
     });
+    expect(semi?.pricing).toMatchObject({
+      effectiveCostCents: 85,
+      effectivePriceReason: 'GENERAL_OFFER',
+      potentialLoyaltyCostCents: 75,
+    });
   });
+
+  it.each([
+    ['ENABLED', 75, 'LOYALTY'],
+    ['DISABLED', 85, 'GENERAL_OFFER'],
+  ] as const)(
+    'applies household Lidl Plus status %s to package pricing',
+    async (status, cost, reason) => {
+      await createHousehold('house-a', {
+        name: 'Leche',
+        normalizedName: 'leche',
+        supermarketId: 'lidl',
+      });
+      await createProduct('milk-semi', 'Leche semidesnatada Milbona', 95, true);
+      await testEnv.DB.prepare(
+        `INSERT INTO household_loyalty_programs
+         (household_id, program_code, status, created_at, updated_at)
+       VALUES ('house-a', 'LIDL_PLUS', ?, ?, ?)`,
+      )
+        .bind(status, '2026-08-29T00:00:00.000Z', '2026-08-29T00:00:00.000Z')
+        .run();
+
+      const result = await service().list(device('house-a'));
+      expect(result.matchedItems[0].candidates[0].pricing).toMatchObject({
+        effectiveCostCents: cost,
+        effectivePriceReason: reason,
+        potentialLoyaltyCostCents: null,
+      });
+    },
+  );
+
+  it.each([
+    ['expired', '2026-08-20', '2026-08-28'],
+    ['future', '2026-08-30', '2026-09-05'],
+  ])(
+    'does not use an %s Lidl Plus offer as the current effective price',
+    async (_label, from, until) => {
+      await createHousehold('house-a', {
+        name: 'Leche',
+        normalizedName: 'leche',
+        supermarketId: 'lidl',
+      });
+      await createProduct('milk-semi', 'Leche semidesnatada Milbona', 95, true);
+      await testEnv.DB.prepare(
+        `UPDATE offers SET valid_from = ?, valid_until = ? WHERE product_id = 'milk-semi'`,
+      )
+        .bind(from, until)
+        .run();
+      await testEnv.DB.prepare(
+        `INSERT INTO household_loyalty_programs
+         (household_id, program_code, status, created_at, updated_at)
+       VALUES ('house-a', 'LIDL_PLUS', 'ENABLED', ?, ?)`,
+      )
+        .bind('2026-08-29T00:00:00.000Z', '2026-08-29T00:00:00.000Z')
+        .run();
+
+      const result = await service().list(device('house-a'));
+      expect(result.matchedItems[0].candidates[0].pricing).toMatchObject({
+        effectiveCostCents: 95,
+        effectivePriceReason: 'REGULAR',
+      });
+    },
+  );
 
   it('learns a manual selection by household and normalized name across cycles', async () => {
     await createHousehold('house-a', { name: 'Leche', normalizedName: 'leche' });

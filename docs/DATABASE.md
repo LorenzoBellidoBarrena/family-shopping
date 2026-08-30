@@ -3,7 +3,8 @@
 Las migraciones son `0001_initial_schema.sql`, `0002_realtime_revisions.sql`,
 `0003_supermarket_catalog.sql`, `0004_product_categories.sql`,
 `0005_carrefour_import_foundation.sql`, `0006_nullable_offer_validity.sql`,
-`0007_household_product_matches.sql` y `0008_package_descriptions.sql`. Se validan con el runtime
+`0007_household_product_matches.sql`, `0008_package_descriptions.sql` y
+`0009_household_loyalty_programs.sql`. Se validan con el runtime
 de pruebas oficial de Workers y D1 local.
 
 ## Tablas
@@ -18,6 +19,7 @@ de pruebas oficial de Workers y D1 local.
   normalizado/hogar.
 - `pairing_codes`: hashes de códigos temporales, expiración y marca de uso.
 - `household_revisions`: secuencia creciente de eventos de sincronización por hogar.
+- `household_loyalty_programs`: estado compartido de programas de fidelización por hogar.
 - `stores`: establecimientos o ámbitos comerciales, con geolocalización opcional.
 - `external_products`: catálogo publicado, EAN opcional, formato original y última observación.
 - `product_aliases`: equivalencias léxicas globales y matches Lidl aprendidos aislados por hogar.
@@ -104,6 +106,17 @@ texto original publicado (`3x65 g`, `Aprox. 400 g`, `A granel`). Hace un backfil
 `package_quantity/package_unit`; los imports Lidl posteriores guardan el texto exacto. Los cálculos
 de envases, exceso y coste siguen siendo derivados en runtime y no crean columnas.
 
+## Preferencias de fidelización
+
+`0009_household_loyalty_programs.sql` crea una tabla con clave primaria
+`(household_id, program_code)`, foreign key con borrado en cascada y timestamps. `program_code`
+admite `LIDL_PLUS`, `CLUB_DIA` y `CLUB_CARREFOUR`; sólo Lidl Plus está expuesto actualmente. El
+estado se restringe a `UNKNOWN`, `ENABLED` o `DISABLED`. Para hogares existentes no se inserta
+ninguna fila: ausencia equivale al default seguro `UNKNOWN`.
+
+No se almacenan identificadores personales ni credenciales de supermercados. El precio efectivo y
+los ahorros se derivan en runtime y no sustituyen precios, ofertas ni histórico.
+
 ## Atomicidad
 
 - Bootstrap: household, singleton, primer device y primer ciclo en un lote.
@@ -121,9 +134,9 @@ npm run db:setup:local
 ```
 
 El seed `database/seeds/0001_supermarkets.sql` es idempotente. `0007` añade exclusivamente la
-persistencia de matching familiar y `0008` conserva la descripción del envase; ninguna altera
-items, ciclos, precios u ofertas. Los fixtures viven sólo en código/pruebas y nunca se cargan
-mediante una migración.
+persistencia de matching familiar, `0008` conserva la descripción del envase y `0009` añade la
+preferencia loyalty compartida; ninguna altera items, ciclos, precios u ofertas. Los fixtures viven
+sólo en código/pruebas y nunca se cargan mediante una migración.
 
-Las migraciones `0001`–`0008` están aplicadas tanto en D1 local como en
+Las migraciones `0001`–`0009` están aplicadas tanto en D1 local como en
 `family-shopping-db` remota; no quedan migraciones pendientes al cierre del 30 de agosto de 2026.

@@ -8,6 +8,7 @@ import type {
   OfferSupermarketId,
   ListMatchCandidate,
   PackageCalculation,
+  EffectivePriceReason,
   PairingDetails,
   ProductPreference,
   ProductCategory,
@@ -331,14 +332,14 @@ export class App implements OnInit {
     return `${amount} ${unit === 'COUNT' ? (amount === 1 ? 'unidad' : 'unidades') : amount === 1 ? 'pack' : 'packs'}`;
   }
 
-  protected estimatedSavingCents(regular: number | null, discounted: number | null): number | null {
-    if (regular === null || discounted === null || regular <= discounted) return null;
-    return regular - discounted;
-  }
-
-  protected savingCents(normalPriceCents: number | null, offerPriceCents: number): number | null {
-    if (normalPriceCents === null || normalPriceCents <= offerPriceCents) return null;
-    return normalPriceCents - offerPriceCents;
+  protected effectiveReasonLabel(reason: EffectivePriceReason | null): string {
+    const labels: Record<EffectivePriceReason, string> = {
+      REGULAR: 'Precio normal',
+      GENERAL_OFFER: 'Oferta general',
+      LOYALTY: 'Lidl Plus',
+      QUANTITY_PROMOTION: 'Promoción por cantidad',
+    };
+    return reason ? labels[reason] : '';
   }
 
   protected confidenceLabel(confidence: ListMatchCandidate['confidence']): string {

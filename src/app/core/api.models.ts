@@ -63,6 +63,23 @@ export interface ProductPreference {
 
 export const OFFER_SUPERMARKET_IDS = ['lidl', 'mercadona', 'carrefour', 'dia'] as const;
 export type OfferSupermarketId = (typeof OFFER_SUPERMARKET_IDS)[number];
+export type LoyaltyProgramCode = 'LIDL_PLUS' | 'CLUB_DIA' | 'CLUB_CARREFOUR';
+export type LoyaltyStatus = 'UNKNOWN' | 'ENABLED' | 'DISABLED';
+export type EffectivePriceReason = 'REGULAR' | 'GENERAL_OFFER' | 'LOYALTY' | 'QUANTITY_PROMOTION';
+
+export interface HouseholdLoyaltyProgram {
+  program: LoyaltyProgramCode;
+  status: LoyaltyStatus;
+}
+
+export interface EffectivePriceCalculation {
+  effectiveCostCents: number | null;
+  effectivePriceReason: EffectivePriceReason | null;
+  potentialLoyaltyCostCents: number | null;
+  generalSavingCents: number | null;
+  additionalLoyaltySavingCents: number | null;
+  totalSavingCents: number | null;
+}
 
 export interface CatalogOffer {
   id: string;
@@ -98,6 +115,7 @@ export interface CatalogOffer {
   observedAt: string;
   relatedToList: boolean;
   matchedItemNames: string[];
+  pricing: EffectivePriceCalculation;
 }
 
 export interface OffersResponse {
@@ -151,6 +169,7 @@ export interface ListMatchCandidate {
   visualCategory: ProductCategory;
   packageLabel: string | null;
   package: PackageCalculation;
+  pricing: EffectivePriceCalculation;
   currentPriceCents: number | null;
   score: number;
   confidence: Exclude<MatchConfidence, 'LOW'>;
@@ -224,6 +243,7 @@ export const SYNC_EVENT_TYPES = [
   'ITEM_DELETED',
   'LIST_CLOSED',
   'LIST_REPLACED',
+  'SETTINGS_UPDATED',
 ] as const;
 
 export interface SyncEvent {

@@ -2,6 +2,7 @@ import type { ProductCategory } from '../../src/shared/product-category';
 import type { PackageCalculation } from './package';
 import type { OfferType } from './supermarket-import';
 import type { Unit } from './types';
+import type { EffectivePriceCalculation } from './loyalty';
 
 export const OFFER_SUPERMARKETS = ['lidl', 'mercadona', 'carrefour', 'dia'] as const;
 
@@ -44,6 +45,7 @@ export interface CatalogOffer {
 export interface PresentedOffer extends CatalogOffer {
   relatedToList: boolean;
   matchedItemNames: string[];
+  pricing: EffectivePriceCalculation;
 }
 
 export interface SupermarketProvider {
@@ -61,6 +63,7 @@ export interface ListMatchCandidate {
   visualCategory: ProductCategory;
   packageLabel: string | null;
   package: PackageCalculation;
+  pricing: EffectivePriceCalculation;
   currentPriceCents: number | null;
   score: number;
   confidence: 'HIGH' | 'MEDIUM';

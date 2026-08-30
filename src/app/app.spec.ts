@@ -8,6 +8,8 @@ import type {
   CatalogOffer,
   ClearAction,
   ItemInput,
+  HouseholdLoyaltyProgram,
+  LoyaltyStatus,
   ListOfferMatchesResponse,
   OfferSupermarketId,
   OffersResponse,
@@ -67,6 +69,7 @@ class FakeTokenStore {
 
 class FakeShoppingApi {
   offersMode: 'DEMO' | 'REAL' = 'DEMO';
+  lidlPlusStatus: LoyaltyStatus = 'UNKNOWN';
   serverCycle = cycle([item('milk', 'Leche', 1000), item('bread', 'Pan', 2000, true)]);
   readonly supermarkets: Supermarket[] = [
     { id: 'lidl', code: 'LIDL', name: 'Lidl' },
@@ -121,6 +124,14 @@ class FakeShoppingApi {
       observedAt: '2026-08-28T00:00:00.000Z',
       relatedToList: true,
       matchedItemNames: ['Leche'],
+      pricing: {
+        effectiveCostCents: 89,
+        effectivePriceReason: 'GENERAL_OFFER',
+        potentialLoyaltyCostCents: null,
+        generalSavingCents: 16,
+        additionalLoyaltySavingCents: null,
+        totalSavingCents: 16,
+      },
     },
   ];
 
@@ -129,14 +140,17 @@ class FakeShoppingApi {
   readonly getSuggestions = vi.fn(async (query = '') =>
     this.habits.filter((habit) => habit.normalizedName.startsWith(query.toLowerCase())),
   );
-  readonly getOffers = vi.fn(async (supermarket?: OfferSupermarketId): Promise<OffersResponse> => ({
-    offers: supermarket
+  readonly getOffers = vi.fn(async (supermarket?: OfferSupermarketId): Promise<OffersResponse> => {
+    const offers = supermarket
       ? this.offerData.filter((offer) => offer.supermarketId === supermarket)
-      : this.offerData,
-    partial: false,
-    mode: this.offersMode,
-    lastUpdatedAt: '2026-08-28T00:00:00.000Z',
-  }));
+      : this.offerData;
+    return {
+      offers: offers.map((offer) => ({ ...offer, pricing: this.offerPricing(offer) })),
+      partial: false,
+      mode: this.offersMode,
+      lastUpdatedAt: '2026-08-28T00:00:00.000Z',
+    };
+  });
   readonly getListOfferMatches = vi.fn(async (): Promise<ListOfferMatchesResponse> => ({
     matchedItems: [
       {
@@ -184,6 +198,7 @@ class FakeShoppingApi {
                     : this.offerData[0].lidlPlusPriceCents * 6,
               },
             },
+            pricing: this.matchPricing(),
             currentPriceCents: 105,
             score: 65,
             confidence: 'MEDIUM',
@@ -197,6 +212,15 @@ class FakeShoppingApi {
     unmatchedItems: [],
     lastUpdatedAt: '2026-08-28T00:00:00.000Z',
   }));
+  readonly getLoyaltyPrograms = vi.fn(async (): Promise<HouseholdLoyaltyProgram[]> => [
+    { program: 'LIDL_PLUS', status: this.lidlPlusStatus },
+  ]);
+  readonly setLoyaltyProgram = vi.fn(
+    async (_program: 'LIDL_PLUS', status: LoyaltyStatus): Promise<HouseholdLoyaltyProgram> => {
+      this.lidlPlusStatus = status;
+      return { program: 'LIDL_PLUS', status };
+    },
+  );
   readonly confirmProductMatch = vi.fn(async () => undefined);
   readonly dismissProductMatch = vi.fn(async () => undefined);
   readonly bootstrap = vi.fn(async (input: BootstrapInput): Promise<BootstrapResponse> => {
@@ -285,6 +309,37 @@ class FakeShoppingApi {
     this.serverCycle = { ...cycle(carried), id: 'cycle-2' };
     return this.serverCycle;
   });
+
+  private matchPricing() {
+    const plus = this.offerData[0].lidlPlusPriceCents;
+    const enabled = this.lidlPlusStatus === 'ENABLED' && plus !== null;
+    return {
+      effectiveCostCents: enabled ? plus * 6 : 534,
+      effectivePriceReason: enabled ? ('LOYALTY' as const) : ('GENERAL_OFFER' as const),
+      potentialLoyaltyCostCents:
+        this.lidlPlusStatus === 'UNKNOWN' && plus !== null ? plus * 6 : null,
+      generalSavingCents: 96,
+      additionalLoyaltySavingCents: plus === null ? null : 534 - plus * 6,
+      totalSavingCents: enabled && plus !== null ? 630 - plus * 6 : 96,
+    };
+  }
+
+  private offerPricing(offer: CatalogOffer) {
+    const plus = offer.lidlPlusPriceCents;
+    const enabled = this.lidlPlusStatus === 'ENABLED' && plus !== null;
+    return {
+      effectiveCostCents: enabled ? plus : offer.offerPriceCents,
+      effectivePriceReason: enabled ? ('LOYALTY' as const) : ('GENERAL_OFFER' as const),
+      potentialLoyaltyCostCents: this.lidlPlusStatus === 'UNKNOWN' && plus !== null ? plus : null,
+      generalSavingCents:
+        offer.normalPriceCents === null ? null : offer.normalPriceCents - offer.offerPriceCents,
+      additionalLoyaltySavingCents: plus === null ? null : offer.offerPriceCents - plus,
+      totalSavingCents:
+        offer.normalPriceCents === null
+          ? null
+          : offer.normalPriceCents - (enabled && plus !== null ? plus : offer.offerPriceCents),
+    };
+  }
 }
 
 class FakeNetworkStatus {
@@ -507,11 +562,119 @@ describe('Shopping list interface', () => {
     button('％ Ofertas').click();
     await settle();
 
-    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    const text = ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/gu, ' ');
     expect(text).toContain('Datos reales · Lidl');
     expect(text).toContain('Badajoz');
-    expect(text).toContain('Con Lidl Plus: 4,74');
+    expect(text).toContain('Lidl Plus: 4,74');
+    expect(text).toContain('Tu precio: 5,34');
+    expect(text).toContain('Con Lidl Plus sería 4,74');
     expect(text).not.toContain('Los precios no son datos comerciales reales');
+  });
+
+  it('loads and saves UNKNOWN, ENABLED, and DISABLED Lidl Plus states in settings', async () => {
+    button('⚙ Ajustes').click();
+    await settle();
+
+    expect(api.getLoyaltyPrograms).toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Sin configurar');
+    expect(button('Sí').getAttribute('aria-pressed')).toBe('false');
+    expect(button('No').getAttribute('aria-pressed')).toBe('false');
+
+    button('Sí').click();
+    await settle();
+    expect(api.setLoyaltyProgram).toHaveBeenLastCalledWith('LIDL_PLUS', 'ENABLED');
+    expect(fixture.nativeElement.textContent).toContain('Activado para este hogar');
+    expect(button('Sí').getAttribute('aria-pressed')).toBe('true');
+
+    button('No').click();
+    await settle();
+    expect(api.setLoyaltyProgram).toHaveBeenLastCalledWith('LIDL_PLUS', 'DISABLED');
+    expect(fixture.nativeElement.textContent).toContain('Desactivado para este hogar');
+    expect(button('No').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows a settings error without changing the saved state', async () => {
+    button('⚙ Ajustes').click();
+    await settle();
+    api.setLoyaltyProgram.mockRejectedValueOnce(new Error('No se pudo guardar Lidl Plus'));
+
+    button('Sí').click();
+    await settle();
+
+    expect(fixture.nativeElement.textContent).toContain('No se pudo guardar Lidl Plus');
+    expect(fixture.nativeElement.textContent).toContain('Sin configurar');
+  });
+
+  it('shows an error when a remote settings refresh cannot be loaded', async () => {
+    api.getLoyaltyPrograms.mockRejectedValueOnce(new Error('No se pudo cargar Lidl Plus'));
+    realtime.eventHandler?.({
+      version: 1,
+      id: 'settings-error-event',
+      type: 'SETTINGS_UPDATED',
+      householdId: 'household-1',
+      revision: 1,
+      occurredAt: new Date().toISOString(),
+      payload: { program: 'LIDL_PLUS' },
+    });
+    await settle();
+    button('⚙ Ajustes').click();
+    await settle();
+
+    expect(fixture.nativeElement.textContent).toContain('No se pudo cargar Lidl Plus');
+  });
+
+  it('uses Lidl Plus as Tu precio only after the household enables it', async () => {
+    api.offersMode = 'REAL';
+    api.offerData[0].fixture = false;
+    api.offerData[0].lidlPlusPriceCents = 79;
+    button('⚙ Ajustes').click();
+    await settle();
+    button('Sí').click();
+    await settle();
+    button('← Volver').click();
+    button('％ Ofertas').click();
+    await settle();
+
+    const text = ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/gu, ' ');
+    expect(text).toContain('✓ Tu precio con Lidl Plus: 4,74');
+    expect(text).toContain('Ahorro adicional Lidl Plus: 0,60');
+    expect(text).not.toContain('Configúralo en Ajustes');
+  });
+
+  it('keeps the general offer as Tu precio when Lidl Plus is disabled', async () => {
+    api.offersMode = 'REAL';
+    api.offerData[0].fixture = false;
+    api.offerData[0].lidlPlusPriceCents = 79;
+    button('⚙ Ajustes').click();
+    await settle();
+    button('No').click();
+    await settle();
+    button('← Volver').click();
+    button('％ Ofertas').click();
+    await settle();
+
+    const text = ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/gu, ' ');
+    expect(text).toContain('Lidl Plus: 4,74');
+    expect(text).toContain('Tu precio: 5,34');
+    expect(text).not.toContain('✓ Tu precio con Lidl Plus');
+  });
+
+  it('refreshes the shared Lidl Plus setting after a remote settings event', async () => {
+    const callsBefore = api.getLoyaltyPrograms.mock.calls.length;
+    api.lidlPlusStatus = 'ENABLED';
+    realtime.eventHandler?.({
+      version: 1,
+      id: 'settings-event',
+      type: 'SETTINGS_UPDATED',
+      householdId: 'household-1',
+      revision: 1,
+      occurredAt: new Date().toISOString(),
+      payload: { program: 'LIDL_PLUS' },
+    });
+    await settle();
+
+    expect(TestBed.inject(ShoppingStore).lidlPlusStatus()).toBe('ENABLED');
+    expect(api.getLoyaltyPrograms.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 
   it('edits a product with explicit controls', async () => {

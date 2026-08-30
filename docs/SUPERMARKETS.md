@@ -361,3 +361,29 @@ Esta capa se desplegó en la versión `c0392240-a475-43cb-9389-ebe279e54069`. La
 `0008_package_descriptions.sql` está aplicada en D1 remota y el backfill dejó descripción en los
 53 productos Lidl existentes. No se modificaron discovery, campañas, precios, Cron ni otros
 proveedores.
+
+### Configuración familiar Lidl Plus
+
+La existencia de un precio `LOYALTY_PRICE/LIDL_PLUS` no presupone que sea aplicable. Cada hogar
+tiene `UNKNOWN`, `ENABLED` o `DISABLED`; el default es `UNKNOWN` por ausencia de registro. El Worker
+conserva normal, oferta general y Lidl Plus y calcula aparte el menor pago inmediato aplicable.
+`UNKNOWN` muestra el potencial Lidl Plus sin elegirlo; `DISABLED` mantiene ese precio como
+información; `ENABLED` lo elige únicamente si está vigente, pertenece a Lidl Plus y mejora el coste.
+
+La lógica se aplica después de `PromotionCalculator`, por lo que varios envases, `3x2` y segunda
+unidad conservan sus reglas. Cashback nunca rebaja lo pagado hoy. El desglose separa ahorro general,
+ahorro adicional Lidl Plus y ahorro total, siempre en céntimos enteros. No se recopilan email,
+contraseña, tarjeta, QR ni otro identificador de Lidl.
+
+La persistencia usa códigos extensibles y admite en el futuro `CLUB_DIA` y `CLUB_CARREFOUR` sin
+nuevas columnas. Ninguno de esos programas ni proveedores se activa en esta fase.
+
+Revisión D1 del 30 de agosto de 2026, por envase y en céntimos enteros:
+
+| Producto                  | Normal | Oferta | Lidl Plus | Efectivo OFF | Efectivo ON |
+| ------------------------- | -----: | -----: | --------: | -----------: | ----------: |
+| Burger de atún            | 3,49 € | 2,95 € |    2,44 € |       2,95 € |      2,44 € |
+| Gamba cocida              | 5,49 € | 4,39 € |    3,29 € |       4,39 € |      3,29 € |
+| Mejillón cocido al limón  | 3,99 € | 3,39 € |    2,79 € |       3,39 € |      2,79 € |
+| Pan bocadillo             | 1,29 € | 1,09 € |    0,90 € |       1,09 € |      0,90 € |
+| Copos de avena Crownfield | 1,45 € | 1,23 € |    1,01 € |       1,23 € |      1,01 € |

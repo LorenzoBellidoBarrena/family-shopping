@@ -11,6 +11,8 @@ import { readJsonObject } from '../validation';
 import { routeAdminImports } from './admin-import-router';
 import { ProductMatchRepository } from '../repositories/product-match-repository';
 import { ListOfferMatchingService } from '../services/list-offer-matching-service';
+import { HouseholdLoyaltyRepository } from '../repositories/household-loyalty-repository';
+import { HouseholdLoyaltyService } from '../services/household-loyalty-service';
 
 const itemMatch = (pathname: string): { itemId: string; toggle: boolean } | null => {
   const match = /^\/api\/items\/([^/]+)(\/toggle)?$/u.exec(pathname);
@@ -23,6 +25,11 @@ const productMatch = (pathname: string): { itemId: string } | null => {
   return match ? { itemId: decodeURIComponent(match[1]) } : null;
 };
 
+const loyaltyProgramMatch = (pathname: string): { program: string } | null => {
+  const match = /^\/api\/settings\/loyalty-programs\/([^/]+)$/u.exec(pathname);
+  return match ? { program: decodeURIComponent(match[1]) } : null;
+};
+
 export const routeApi = async (
   request: Request,
   env: Env,
@@ -33,14 +40,17 @@ export const routeApi = async (
   const auth = new AuthService(repository, env.HOUSEHOLD_ACCESS_KEY, context);
   const shopping = new ShoppingService(repository);
   const realtime = new RealtimePublisher(env, repository, context);
+  const loyaltyRepository = new HouseholdLoyaltyRepository(env.DB);
+  const loyalty = new HouseholdLoyaltyService(loyaltyRepository);
   const offers =
     env.SUPERMARKET_FEATURE_ENABLED === 'true'
-      ? new OffersService(repository, [new LidlD1OffersProvider(env.DB)], 'REAL')
+      ? new OffersService(repository, [new LidlD1OffersProvider(env.DB)], 'REAL', loyaltyRepository)
       : new OffersService(repository);
   const listMatching = new ListOfferMatchingService(
     repository,
     new ProductMatchRepository(env.DB),
     new LidlD1OffersProvider(env.DB),
+    loyaltyRepository,
   );
 
   if (url.pathname === '/api/health') {
@@ -63,9 +73,11 @@ export const routeApi = async (
 
   const matchedItem = itemMatch(url.pathname);
   const matchedProductPreference = productMatch(url.pathname);
+  const matchedLoyaltyProgram = loyaltyProgramMatch(url.pathname);
   const knownPrivatePath =
     matchedItem !== null ||
     matchedProductPreference !== null ||
+    matchedLoyaltyProgram !== null ||
     url.pathname === '/api/pairings' ||
     url.pathname === '/api/shopping-cycle/active' ||
     url.pathname === '/api/shopping-cycle/complete' ||
@@ -74,10 +86,27 @@ export const routeApi = async (
     url.pathname === '/api/supermarkets' ||
     url.pathname === '/api/offers' ||
     url.pathname === '/api/offers/for-list' ||
+    url.pathname === '/api/settings/loyalty-programs' ||
     url.pathname === '/api/product-preferences/suggestions';
   if (!knownPrivatePath) throw notFound('La ruta solicitada no existe.');
 
   const device = await auth.authorize(request);
+
+  if (url.pathname === '/api/settings/loyalty-programs') {
+    if (request.method !== 'GET') return methodNotAllowed(['GET']);
+    return jsonResponse(await loyalty.list(device));
+  }
+
+  if (matchedLoyaltyProgram) {
+    if (request.method !== 'PUT') return methodNotAllowed(['PUT']);
+    const setting = await loyalty.set(
+      device,
+      matchedLoyaltyProgram.program,
+      await readJsonObject(request),
+    );
+    realtime.publish(device, 'SETTINGS_UPDATED', { program: setting.program });
+    return jsonResponse(setting);
+  }
 
   if (url.pathname === '/api/pairings') {
     if (request.method !== 'POST') return methodNotAllowed(['POST']);

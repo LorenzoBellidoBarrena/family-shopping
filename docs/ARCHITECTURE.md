@@ -48,6 +48,8 @@ El store reemplaza items en su índice actual al marcar o editar, por lo que nun
   separa sugerencia de match automático.
 - `services/product-matching.ts`: tokenización, aliases, contradicciones y scoring puro/explicable.
 - `services/package-matching.ts`: parser de envases, conversiones, ajuste y costes promocionales.
+- `services/effective-price.ts`: selecciona el menor coste inmediato aplicable y explica la razón.
+- `services/household-loyalty-service.ts`: preferencia loyalty autenticada y compartida por hogar.
 - `repositories/product-match-repository.ts`: catálogo actual en bloque y preferencias por hogar.
 - `providers/*-provider.ts`: adaptadores independientes de Lidl, Mercadona, Carrefour y DIA.
 - `domain/supermarkets.ts`: contrato `SupermarketProvider` y tipos de catálogo independientes.
@@ -113,6 +115,23 @@ completos para `BUY_X_PAY_Y` y descuento sólo en cada segunda unidad para
 Plus permanecen escenarios separados. Para granel se usa precio unitario únicamente si la fuente
 publica una unidad compatible; el resultado se redondea al céntimo más próximo, mitad hacia arriba,
 y se etiqueta estimado.
+
+## Precio efectivo y fidelización
+
+La identidad del producto, el ajuste de envase y la aplicabilidad del precio son tres capas
+separadas. `EffectivePriceCalculator` recibe los costes ya calculados y el estado del programa del
+hogar. Escoge el menor precio inmediato entre regular, oferta general vigente y loyalty vigente
+sólo si su estado es `ENABLED`. `UNKNOWN` y `DISABLED` usan el mejor precio no loyalty; `UNKNOWN`
+puede exponer el posible coste Lidl Plus sin aplicarlo.
+
+La respuesta conserva todos los escenarios y añade una razón segura: `REGULAR`, `GENERAL_OFFER`,
+`LOYALTY` o `QUANTITY_PROMOTION`. Cashback no se convierte en descuento inmediato. La tabla y los
+contratos admiten `CLUB_DIA` y `CLUB_CARREFOUR`, pero no se exponen ni implementan todavía.
+
+Un cambio emite `SETTINGS_UPDATED` por el Durable Object del hogar. El dispositivo origen actualiza
+su señal directamente y los demás vuelven a leer la preferencia y, si estaban mostrando Ofertas,
+los precios calculados. No se amplía la cola offline: la lista sigue disponible sin conexión, pero
+la preferencia loyalty sólo se modifica online.
 
 D1 es la fuente persistente de verdad. Los cierres, la creación del siguiente ciclo y el copiado de
 pendientes se confirman en un único `D1.batch`. El Durable Object no guarda una copia del dominio:

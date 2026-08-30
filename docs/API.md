@@ -46,6 +46,8 @@ inicializado devuelve `409`, incluso aunque la clave sea correcta.
 | `GET`    | `/api/supermarkets`                    | Supermercados activos ordenados.                            |
 | `GET`    | `/api/offers`                          | Ofertas publicadas, aisladas por proveedor.                 |
 | `GET`    | `/api/offers/for-list`                 | Candidatos Lidl para los pendientes del hogar autenticado.  |
+| `GET`    | `/api/settings/loyalty-programs`       | Preferencias loyalty compartidas del hogar.                 |
+| `PUT`    | `/api/settings/loyalty-programs/:code` | Actualiza una preferencia loyalty del hogar.                |
 | `PUT`    | `/api/items/:id/product-match`         | Confirma el producto Lidl preferido para ese nombre.        |
 | `DELETE` | `/api/items/:id/product-match`         | Quita la relación automática aprendida; devuelve `204`.     |
 | `GET`    | `/api/product-preferences/suggestions` | Preferencias por frecuencia y prefijo normalizado.          |
@@ -101,6 +103,10 @@ separados y siempre enteros en céntimos. `UNKNOWN` conserva el match de identid
 formato, pero no inventa número de envases ni coste. Las promociones futuras/caducadas no se usan en
 el cálculo de la sección actual.
 
+Cada candidato añade `pricing`, calculado por el Worker, con `effectiveCostCents`,
+`effectivePriceReason`, `potentialLoyaltyCostCents` y los ahorros general, adicional loyalty y
+total. Los componentes Angular no vuelven a calcular qué precio es aplicable.
+
 `PUT /api/items/:id/product-match` recibe:
 
 ```json
@@ -116,6 +122,21 @@ pero permite seguir mostrando candidatos manuales si existen.
 Los items con supermercado `LIDL`, `ANY` o sin supermercado pueden considerar Lidl. Una
 preferencia explícita por Mercadona, Carrefour o DIA no se cambia ni se utiliza para sugerir Lidl
 en esta primera versión.
+
+## Programas de fidelización
+
+`GET /api/settings/loyalty-programs` devuelve actualmente `LIDL_PLUS`. La ausencia de una fila se
+representa como `UNKNOWN`; nunca se deduce que el hogar tiene el programa por existir una oferta.
+
+```json
+{
+  "loyaltyPrograms": [{ "program": "LIDL_PLUS", "status": "UNKNOWN" }]
+}
+```
+
+`PUT /api/settings/loyalty-programs/LIDL_PLUS` acepta `UNKNOWN`, `ENABLED` o `DISABLED`, con
+validación runtime. El household se obtiene exclusivamente del device token; un `householdId`
+enviado en el cuerpo se ignora. No se almacenan cuentas, tarjetas, QR ni credenciales de Lidl.
 
 ## Producto
 
@@ -163,8 +184,8 @@ autoriza el dispositivo antes de conectarlo al Durable Object de su hogar.
 
 Cada aviso es JSON con `version: 1`, `id`, `type`, `householdId`, `revision`, `occurredAt` y
 `payload`. Los tipos actuales son `ITEM_CREATED`, `ITEM_UPDATED`, `ITEM_CHECKED`,
-`ITEM_UNCHECKED`, `ITEM_DELETED`, `LIST_CLOSED` y `LIST_REPLACED`. El aviso indica que hay una nueva
-versión; el cliente vuelve a leer `/api/shopping-cycle/active` para reconciliarse con D1.
+`ITEM_UNCHECKED`, `ITEM_DELETED`, `LIST_CLOSED`, `LIST_REPLACED` y `SETTINGS_UPDATED`. Los eventos
+de lista recargan el ciclo; el de ajustes vuelve a leer la preferencia y los precios visibles.
 
 ## Vinculación
 

@@ -134,6 +134,57 @@
           <strong>Sincronización</strong>
           <span>{{ store.offline() ? 'Sin conexión' : store.realtimeStatus() }}</span>
         </div>
+        <section class="loyalty-settings" aria-labelledby="loyalty-settings-title">
+          <div>
+            <p class="eyebrow">Programas de fidelización</p>
+            <h3 id="loyalty-settings-title">Lidl Plus</h3>
+            <p>¿Utilizáis Lidl Plus al comprar?</p>
+          </div>
+          @if (store.loyaltyLoading()) {
+            <p class="supporting-text" role="status">Cargando configuración…</p>
+          } @else {
+            <div class="loyalty-choice" aria-label="Configurar Lidl Plus">
+              <button
+                type="button"
+                [class.loyalty-choice--selected]="store.lidlPlusStatus() === 'ENABLED'"
+                [attr.aria-pressed]="store.lidlPlusStatus() === 'ENABLED'"
+                [disabled]="store.loyaltySaving() || store.offline()"
+                (click)="store.setLidlPlusStatus('ENABLED')"
+              >
+                Sí
+              </button>
+              <button
+                type="button"
+                [class.loyalty-choice--selected]="store.lidlPlusStatus() === 'DISABLED'"
+                [attr.aria-pressed]="store.lidlPlusStatus() === 'DISABLED'"
+                [disabled]="store.loyaltySaving() || store.offline()"
+                (click)="store.setLidlPlusStatus('DISABLED')"
+              >
+                No
+              </button>
+            </div>
+            <p class="loyalty-status" aria-live="polite">
+              @switch (store.lidlPlusStatus()) {
+                @case ('ENABLED') {
+                  Activado para este hogar
+                }
+                @case ('DISABLED') {
+                  Desactivado para este hogar
+                }
+                @default {
+                  Sin configurar
+                }
+              }
+            </p>
+          }
+          <p class="supporting-text">
+            Si lo activas, usaremos los precios Lidl Plus para calcular el coste cuando estén
+            disponibles.
+          </p>
+          @if (store.loyaltyError()) {
+            <p class="settings-error" role="alert">{{ store.loyaltyError() }}</p>
+          }
+        </section>
         <button
           class="primary-button"
           type="button"
@@ -160,6 +211,11 @@
             Campañas regionales de Badajoz · Última actualización:
             {{ formatUpdatedAt(store.offersLastUpdatedAt()) }}
           </p>
+          @if (store.lidlPlusStatus() === 'UNKNOWN') {
+            <p class="loyalty-config-hint">
+              ¿Tienes Lidl Plus? Configúralo en Ajustes para usar ese precio automáticamente.
+            </p>
+          }
         } @else {
           <p class="supporting-text">
             Esta primera versión usa fixtures para validar la experiencia. Los precios no son datos
@@ -270,19 +326,51 @@
                             }
                             @if (candidate.package.costs.lidlPlusCostCents !== null) {
                               <span class="loyalty-note">
-                                Con Lidl Plus:
+                                Lidl Plus:
                                 {{ formatPrice(candidate.package.costs.lidlPlusCostCents) }}
                               </span>
                             }
                           </div>
+                          @if (candidate.pricing.effectiveCostCents !== null) {
+                            <div class="effective-price">
+                              <strong>
+                                @if (candidate.pricing.effectivePriceReason === 'LOYALTY') {
+                                  ✓ Tu precio con Lidl Plus:
+                                } @else {
+                                  Tu precio:
+                                }
+                                {{ formatPrice(candidate.pricing.effectiveCostCents) }}
+                              </strong>
+                              <span>{{
+                                effectiveReasonLabel(candidate.pricing.effectivePriceReason)
+                              }}</span>
+                            </div>
+                          }
+                          @if (candidate.pricing.potentialLoyaltyCostCents !== null) {
+                            <p class="loyalty-config-hint">
+                              Con Lidl Plus sería
+                              {{ formatPrice(candidate.pricing.potentialLoyaltyCostCents) }}.
+                            </p>
+                          }
+                          @if (candidate.pricing.generalSavingCents !== null) {
+                            <p class="saving-note">
+                              Ahorras con la oferta:
+                              {{ formatPrice(candidate.pricing.generalSavingCents) }}
+                            </p>
+                          }
                           @if (
-                            estimatedSavingCents(
-                              candidate.package.costs.regularCostCents,
-                              candidate.package.costs.generalOfferCostCents
-                            );
-                            as saving
+                            store.lidlPlusStatus() === 'ENABLED' &&
+                            candidate.pricing.additionalLoyaltySavingCents !== null
                           ) {
-                            <p class="saving-note">🔥 Ahorras {{ formatPrice(saving) }}</p>
+                            <p class="saving-note">
+                              Ahorro adicional Lidl Plus:
+                              {{ formatPrice(candidate.pricing.additionalLoyaltySavingCents) }}
+                            </p>
+                          }
+                          @if (candidate.pricing.totalSavingCents !== null) {
+                            <p class="saving-note">
+                              🔥 Ahorro total: {{ formatPrice(candidate.pricing.totalSavingCents) }}
+                            </p>
                           }
                         } @else {
                           <div class="offer-price">
@@ -396,6 +484,25 @@
                   @if (offer.lidlPlusPriceCents !== null) {
                     <p class="loyalty-note">
                       Lidl Plus: {{ formatPrice(offer.lidlPlusPriceCents) }}
+                    </p>
+                  }
+                  @if (offer.pricing.effectiveCostCents !== null) {
+                    <div class="effective-price">
+                      <strong>
+                        @if (offer.pricing.effectivePriceReason === 'LOYALTY') {
+                          ✓ Tu precio con Lidl Plus:
+                        } @else {
+                          Tu precio:
+                        }
+                        {{ formatPrice(offer.pricing.effectiveCostCents) }}
+                      </strong>
+                      <span>{{ effectiveReasonLabel(offer.pricing.effectivePriceReason) }}</span>
+                    </div>
+                  }
+                  @if (offer.pricing.potentialLoyaltyCostCents !== null) {
+                    <p class="loyalty-config-hint">
+                      Con Lidl Plus sería
+                      {{ formatPrice(offer.pricing.potentialLoyaltyCostCents) }}.
                     </p>
                   }
                   <p class="offer-promotion">{{ offer.promotionType }}</p>

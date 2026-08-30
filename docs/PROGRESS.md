@@ -1,13 +1,23 @@
 # Progreso
 
-## Fase actual: matching de cantidades y envases Lidl
+## Fase actual: configuración familiar Lidl Plus y precio efectivo
 
-Estado: la identidad Lidl mantiene su scoring validado y añade una capa separada para cantidad,
-formato, envases necesarios, exceso y costes regular/oferta/Lidl Plus. La lista familiar conserva
-todos sus campos y rendimiento; los cálculos se hacen al abrir Ofertas sobre D1. La automatización
-diaria continúa exactamente a las 05:00 de `Europe/Madrid`.
+Estado: cada hogar puede declarar si utiliza Lidl Plus y el Worker selecciona el menor precio
+inmediato realmente aplicable sin perder normal, oferta general, loyalty ni desglose. Identidad,
+cantidades, lista y automatización diaria permanecen independientes.
 
 ### Implementado
+
+- Migración aditiva `0009_household_loyalty_programs.sql`, aislada por hogar y extensible a
+  `CLUB_DIA`/`CLUB_CARREFOUR`; hogares existentes quedan `UNKNOWN` sin backfill.
+- Endpoints privados GET/PUT que derivan el hogar del device token y validan programa/estado en
+  runtime. No se aceptan households arbitrarios ni se almacenan credenciales Lidl.
+- `EffectivePriceCalculator` central: menor coste inmediato regular/general/loyalty, razones
+  seguras, potencial Lidl Plus y ahorros general/adicional/total. Cashback conserva el pago actual.
+- Ajustes con Sí/No/estado neutro, bloqueo offline, feedback de carga/error y actualización en el
+  segundo móvil mediante `SETTINGS_UPDATED` y refetch.
+- Ofertas generales y de la lista muestran `Tu precio`; Lidl Plus sólo se prioriza cuando el hogar
+  lo habilita. `UNKNOWN` sugiere configurarlo sin aplicarlo silenciosamente.
 
 - `PackageDescriptor` determinista para `750 g`, `1 kg`, multipacks como `3x65 g` y `18x33 cl`,
   unidades explícitas, `Aprox.`, `A granel` y formatos desconocidos. `cl` se normaliza a `ml`.
@@ -172,16 +182,16 @@ diaria continúa exactamente a las 05:00 de `Europe/Madrid`.
 
 ### Verificación
 
-- 33 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden, caché offline,
-  respuesta optimista, rollback y confirmación manual de un candidato Lidl.
-- 152 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import,
-  idempotencia, Cron, matching de identidad y 40 casos nuevos de cantidad/envase; 185 pruebas en
-  total.
+- 39 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden, caché offline,
+  respuesta optimista, rollback, matching y estados/carga/error de Lidl Plus.
+- 173 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import,
+  idempotencia, Cron, matching, cantidades, precio efectivo, aislamiento household y cashback; 212
+  pruebas en total.
 - Aprendizaje entre ciclos, corrección, descarte, catálogo desaparecido, dos hogares aislados,
   supermercado `ANY`/LIDL/otro, oferta general + Lidl Plus y endpoint sin autenticar cubiertos.
 - Revisión de falsos positivos con 20 pares del catálogo real: 20/20 correctos y ningún `HIGH`
   absurdo.
-- Migraciones `0001`, `0002`, `0003` y `0004` aplicadas y comprobadas en D1 local.
+- Migraciones `0001`–`0009` aplicadas y comprobadas en D1 local.
 - TypeScript estricto, ESLint, Prettier, build PWA y smoke local correctos.
 - El build contiene manifest, `ngsw.json`, worker de servicio e iconos. No se tocó ningún recurso remoto.
 
@@ -226,6 +236,16 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
 - El primer disparo natural de las 05:00 de Madrid terminó `SUCCESS` el 30 de agosto de 2026 a las
   `03:01:16.757Z`: 53 productos, 53 precios, 84 ofertas y ningún error. Cloudflare conserva
   exactamente los Cron `0 3 * * *` y `0 4 * * *`; no se modificó su programación.
+- Preferencias familiares Lidl Plus desplegadas el 30 de agosto de 2026 en la versión
+  `6db16841-5748-4b31-8f71-7b32f37cd32f`; bundle `main-6R3YRTJV.js` y estilos
+  `styles-PPVRGUK2.css`. `0009_household_loyalty_programs.sql` quedó aplicada local y remotamente,
+  sin pendientes y con cero filas iniciales: el hogar comienza en `UNKNOWN`/«Sin configurar».
+- Smoke posterior: shell y `/pair` `200`, salud `200`, API desconocida JSON `404`, settings,
+  ofertas y matching sin token `401`, `/ws` sin upgrade `426`, manifest y service worker `200`.
+  El bundle contiene Lidl Plus, «Sin configurar», `settings/loyalty-programs` y «Tu precio».
+- Los conteos posteriores permanecen en 1 hogar, 2 dispositivos, 1 ciclo activo, 5 items, 5
+  preferencias, 53 productos Lidl y 84 ofertas. El último Cron sigue `SUCCESS` con 53 productos,
+  53 precios, 84 ofertas y sin error; los triggers no cambiaron.
 - Smoke posterior al Cron: shell y `/pair` `200`, salud `200`, API desconocida `404`, ofertas sin
   token `401` y `/ws` sin upgrade `426`. Los conteos familiares permanecieron en 1 hogar, 2
   dispositivos, 1 ciclo activo, 5 items y 5 preferencias. El catálogo remoto siguió en 53
@@ -235,7 +255,7 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
 - Preview URLs deshabilitadas explícitamente.
 - Smoke tests: shell, manifest, service worker, `/pair` y salud responden `200`; API privada sin
   token y upgrade WebSocket sin credencial responden `401`; `/ws` sin upgrade responde `426`.
-- Migraciones remotas `0001`–`0008` aplicadas; no quedan migraciones pendientes.
+- Migraciones remotas `0001`–`0009` aplicadas; no quedan migraciones pendientes.
 - Prompt 6 desplegado en `https://family-shopping.lorenzo-bellido-b.workers.dev`.
 - Versión de Worker: `0a5998f3-14f1-4c42-95aa-6c18cfd11e0b`.
 - Smoke de producción: shell, JS, CSS y salud responden `200`; bundles contienen la vista y API de

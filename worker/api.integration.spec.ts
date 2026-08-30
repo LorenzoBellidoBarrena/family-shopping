@@ -104,6 +104,7 @@ const toggleItem = async (token: string, itemId: string): Promise<ShoppingItem> 
 beforeEach(async () => {
   await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
   await testEnv.DB.batch([
+    testEnv.DB.prepare(`DELETE FROM household_loyalty_programs`),
     testEnv.DB.prepare(`DELETE FROM product_aliases`),
     testEnv.DB.prepare(`DELETE FROM offers`),
     testEnv.DB.prepare(`DELETE FROM product_prices`),
@@ -168,6 +169,59 @@ describe('household bootstrap and authorization', () => {
     });
 
     expect(response.status).toBe(401);
+  });
+});
+
+describe('household loyalty settings API', () => {
+  it('starts UNKNOWN and persists an authenticated Lidl Plus choice', async () => {
+    const { token } = await bootstrap();
+    const initial = await api('/api/settings/loyalty-programs', { token });
+    expect(initial.status).toBe(200);
+    expect(await readJson(initial)).toEqual({
+      loyaltyPrograms: [{ program: 'LIDL_PLUS', status: 'UNKNOWN' }],
+    });
+
+    const enabled = await api('/api/settings/loyalty-programs/LIDL_PLUS', {
+      method: 'PUT',
+      token,
+      body: { status: 'ENABLED', householdId: 'household-not-authorized' },
+    });
+    expect(enabled.status).toBe(200);
+    expect(await readJson(enabled)).toEqual({ program: 'LIDL_PLUS', status: 'ENABLED' });
+
+    const disabled = await api('/api/settings/loyalty-programs/LIDL_PLUS', {
+      method: 'PUT',
+      token,
+      body: { status: 'DISABLED' },
+    });
+    expect(disabled.status).toBe(200);
+    const current = await api('/api/settings/loyalty-programs', { token });
+    expect(await readJson(current)).toEqual({
+      loyaltyPrograms: [{ program: 'LIDL_PLUS', status: 'DISABLED' }],
+    });
+  });
+
+  it('requires a device token and validates program and status', async () => {
+    const { token } = await bootstrap();
+    expect((await api('/api/settings/loyalty-programs')).status).toBe(401);
+    expect(
+      (
+        await api('/api/settings/loyalty-programs/CLUB_DIA', {
+          method: 'PUT',
+          token,
+          body: { status: 'ENABLED' },
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await api('/api/settings/loyalty-programs/LIDL_PLUS', {
+          method: 'PUT',
+          token,
+          body: { status: 'YES' },
+        })
+      ).status,
+    ).toBe(400);
   });
 });
 
@@ -660,6 +714,7 @@ describe('supermarket offers module', () => {
           confidence: string;
           activeOffers: unknown[];
           package: unknown;
+          pricing: unknown;
         }[];
       }[];
     }>(suggestions);
@@ -688,6 +743,14 @@ describe('supermarket offers module', () => {
               generalOfferCostCents: 89,
               lidlPlusCostCents: null,
             },
+          },
+          pricing: {
+            effectiveCostCents: 89,
+            effectivePriceReason: 'GENERAL_OFFER',
+            potentialLoyaltyCostCents: null,
+            generalSavingCents: 10,
+            additionalLoyaltySavingCents: null,
+            totalSavingCents: 10,
           },
         },
       ],
@@ -725,6 +788,44 @@ describe('household realtime channel', () => {
     const response = await connectWebSocket('invalid-token-long-enough-for-validation-123456789');
 
     expect(response.status).toBe(401);
+  });
+
+  it('broadcasts a household settings change to the other paired device', async () => {
+    const primary = await bootstrap();
+    const generated = await api('/api/pairings', { method: 'POST', token: primary.token });
+    const pairing = await readJson<PairingResponse>(generated);
+    const consumed = await api('/api/pairings/consume', {
+      method: 'POST',
+      body: { code: pairing.code, deviceName: 'Segundo móvil' },
+    });
+    const secondary = await readJson<{ token: string }>(consumed);
+    const upgrade = await connectWebSocket(secondary.token);
+    expect(upgrade.status).toBe(101);
+    const socket = upgrade.webSocket!;
+    socket.accept();
+    const message = new Promise<MessageEvent>((resolve) =>
+      socket.addEventListener('message', resolve, { once: true }),
+    );
+
+    const updated = await api('/api/settings/loyalty-programs/LIDL_PLUS', {
+      method: 'PUT',
+      token: primary.token,
+      body: { status: 'ENABLED' },
+    });
+    expect(updated.status).toBe(200);
+    expect(JSON.parse(String((await message).data))).toMatchObject({
+      version: 1,
+      type: 'SETTINGS_UPDATED',
+      householdId: primary.household.id,
+      payload: { program: 'LIDL_PLUS' },
+    });
+    const secondaryRead = await api('/api/settings/loyalty-programs', {
+      token: secondary.token,
+    });
+    expect(await readJson(secondaryRead)).toEqual({
+      loyaltyPrograms: [{ program: 'LIDL_PLUS', status: 'ENABLED' }],
+    });
+    socket.close(1000, 'test complete');
   });
 
   it('authorizes a paired device and broadcasts versioned events from another device', async () => {

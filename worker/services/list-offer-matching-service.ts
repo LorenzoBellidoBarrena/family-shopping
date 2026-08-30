@@ -15,6 +15,8 @@ import {
 import { normalizeProductName } from '../../src/shared/product-name';
 import { calculatePackageFit, parsePackageDescription } from './package-matching';
 import { scoreProductMatch } from './product-matching';
+import { HouseholdLoyaltyRepository } from '../repositories/household-loyalty-repository';
+import { calculateEffectivePrice } from './effective-price';
 
 const packageLabel = (product: CatalogProductForMatching): string | null => {
   if (product.packageDescription) return product.packageDescription;
@@ -69,16 +71,21 @@ export class ListOfferMatchingService {
     private readonly shoppingRepository: D1Repository,
     private readonly matchRepository: ProductMatchRepository,
     private readonly offersProvider: LidlD1OffersProvider,
+    private readonly loyaltyRepository?: HouseholdLoyaltyRepository,
   ) {}
 
   async list(device: Device): Promise<ListOfferMatchesResponse> {
-    const [cycle, products, preferences, offers, lastUpdatedAt] = await Promise.all([
-      this.shoppingRepository.getActiveCycle(device.householdId),
-      this.matchRepository.listCurrentLidlProducts(),
-      this.matchRepository.listHouseholdPreferences(device.householdId),
-      this.offersProvider.listPublishedOffers(),
-      this.offersProvider.getLastSuccessfulUpdate(),
-    ]);
+    const [cycle, products, preferences, offers, lastUpdatedAt, lidlPlusStatus] = await Promise.all(
+      [
+        this.shoppingRepository.getActiveCycle(device.householdId),
+        this.matchRepository.listCurrentLidlProducts(),
+        this.matchRepository.listHouseholdPreferences(device.householdId),
+        this.offersProvider.listPublishedOffers(),
+        this.offersProvider.getLastSuccessfulUpdate(),
+        this.loyaltyRepository?.getStatus(device.householdId, 'LIDL_PLUS') ??
+          Promise.resolve('UNKNOWN' as const),
+      ],
+    );
     const preferenceByName = new Map(
       preferences.map((preference) => [preference.normalizedAlias, preference]),
     );
@@ -125,6 +132,14 @@ export class ListOfferMatchingService {
           if (scored.confidence === 'LOW') return null;
           const productOffers = activeOffersByProduct.get(product.externalProductId) ?? [];
           const label = packageLabel(product);
+          const generalOffer = productOffers.find((offer) => !offer.requiresLoyaltyCard) ?? null;
+          const packageCalculation = calculatePackageFit(
+            item.quantity,
+            item.unit,
+            parsePackageDescription(label),
+            packagePricing(product, productOffers),
+            countableMultipack(product),
+          );
           return {
             externalProductId: product.externalProductId,
             productName: product.name,
@@ -133,13 +148,12 @@ export class ListOfferMatchingService {
             commercialCategory: product.commercialCategory,
             visualCategory: product.visualCategory,
             packageLabel: label,
-            package: calculatePackageFit(
-              item.quantity,
-              item.unit,
-              parsePackageDescription(label),
-              packagePricing(product, productOffers),
-              countableMultipack(product),
-            ),
+            package: packageCalculation,
+            pricing: calculateEffectivePrice({
+              costs: packageCalculation.costs,
+              loyaltyStatus: lidlPlusStatus,
+              generalOfferType: generalOffer?.offerType,
+            }),
             currentPriceCents: product.currentPriceCents,
             score: scored.score,
             confidence: scored.confidence,

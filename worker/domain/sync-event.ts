@@ -6,6 +6,7 @@ export const SYNC_EVENT_TYPES = [
   'ITEM_DELETED',
   'LIST_CLOSED',
   'LIST_REPLACED',
+  'SETTINGS_UPDATED',
 ] as const;
 
 export type SyncEventType = (typeof SYNC_EVENT_TYPES)[number];

@@ -11,6 +11,9 @@ import { LidlFixtureProvider } from '../providers/lidl-fixture-provider';
 import { MercadonaProvider } from '../providers/mercadona-provider';
 import { D1Repository } from '../repositories/d1-repository';
 import { scoreProductMatch } from './product-matching';
+import { HouseholdLoyaltyRepository } from '../repositories/household-loyalty-repository';
+import { calculatePromotionCost } from './package-matching';
+import { calculateEffectivePrice } from './effective-price';
 
 interface OffersRepository {
   getActiveCycle(householdId: string): ReturnType<D1Repository['getActiveCycle']>;
@@ -28,6 +31,7 @@ export class OffersService {
     private readonly repository: OffersRepository,
     private readonly providers: readonly SupermarketProvider[] = defaultProviders(),
     private readonly mode: 'DEMO' | 'REAL' = 'DEMO',
+    private readonly loyaltyRepository?: HouseholdLoyaltyRepository,
   ) {}
 
   async list(
@@ -47,12 +51,14 @@ export class OffersService {
     const selected = supermarket
       ? this.providers.filter((provider) => provider.supermarketId === supermarket)
       : this.providers;
-    const [cycle, providerResults, updateResults] = await Promise.all([
+    const [cycle, providerResults, updateResults, lidlPlusStatus] = await Promise.all([
       this.repository.getActiveCycle(device.householdId),
       Promise.allSettled(selected.map((provider) => provider.listPublishedOffers())),
       Promise.allSettled(
         selected.map((provider) => provider.getLastSuccessfulUpdate?.() ?? Promise.resolve(null)),
       ),
+      this.loyaltyRepository?.getStatus(device.householdId, 'LIDL_PLUS') ??
+        Promise.resolve('UNKNOWN' as const),
     ]);
     const offers = providerResults.flatMap((result) =>
       result.status === 'fulfilled' ? result.value : [],
@@ -86,6 +92,39 @@ export class OffersService {
           ...offer,
           relatedToList: matchedItemNames.length > 0,
           matchedItemNames,
+          pricing: (() => {
+            if (offer.upcoming) {
+              return calculateEffectivePrice({
+                costs: {
+                  regularCostCents: null,
+                  generalOfferCostCents: null,
+                  lidlPlusCostCents: null,
+                },
+                loyaltyStatus: lidlPlusStatus,
+              });
+            }
+            const regularUnitPrice = offer.normalPriceCents ?? offer.offerPriceCents;
+            const generalOfferCost = offer.requiresLoyaltyCard
+              ? null
+              : calculatePromotionCost({
+                  type: offer.offerType,
+                  packsNeeded: 1,
+                  regularUnitPriceCents: regularUnitPrice,
+                  publishedOfferPriceCents: offer.offerPriceCents,
+                  percentage: offer.percentage,
+                  buyQuantity: offer.buyQuantity,
+                  payQuantity: offer.payQuantity,
+                });
+            return calculateEffectivePrice({
+              costs: {
+                regularCostCents: regularUnitPrice,
+                generalOfferCostCents: generalOfferCost,
+                lidlPlusCostCents: offer.lidlPlusPriceCents,
+              },
+              loyaltyStatus: offer.supermarketId === 'lidl' ? lidlPlusStatus : 'UNKNOWN',
+              generalOfferType: offer.offerType,
+            });
+          })(),
         };
       })
       .sort((left, right) =>
