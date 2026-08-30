@@ -293,15 +293,32 @@ describe('shopping list domain', () => {
          SELECT 'perf-offer-' || substr(id, 14), id, 'perf-store', 200, 150,
                 'Oferta de prueba', '2026-08-01', '2026-09-30',
                 'https://www.lidl.es/', 0, '2026-08-30T00:00:00.000Z'
-         FROM external_products WHERE id LIKE 'perf-product-%'`,
+         FROM external_products
+         WHERE id LIKE 'perf-product-%' AND CAST(substr(id, 14) AS INTEGER) <= 10`,
       ),
     ]);
 
-    const offerCount = await testEnv.DB.prepare(
+    const initialOfferCount = await testEnv.DB.prepare(
       `SELECT COUNT(*) AS count FROM offers WHERE id LIKE 'perf-offer-%'`,
     ).first<{ count: number }>();
-    expect(offerCount?.count).toBe(1000);
+    expect(initialOfferCount?.count).toBe(10);
     expect((await toggleItem(token, item.id)).checked).toBe(true);
+
+    await testEnv.DB.prepare(
+      `INSERT INTO offers
+         (id, product_id, store_id, normal_price_cents, offer_price_cents,
+          promotion_type, valid_from, valid_until, source_url,
+          requires_loyalty_card, observed_at)
+       SELECT 'perf-offer-' || substr(id, 14), id, 'perf-store', 200, 150,
+              'Oferta de prueba', '2026-08-01', '2026-09-30',
+              'https://www.lidl.es/', 0, '2026-08-30T00:00:00.000Z'
+       FROM external_products
+       WHERE id LIKE 'perf-product-%' AND CAST(substr(id, 14) AS INTEGER) > 10`,
+    ).run();
+    const expandedOfferCount = await testEnv.DB.prepare(
+      `SELECT COUNT(*) AS count FROM offers WHERE id LIKE 'perf-offer-%'`,
+    ).first<{ count: number }>();
+    expect(expandedOfferCount?.count).toBe(1000);
     expect((await toggleItem(token, item.id)).checked).toBe(false);
   });
 
