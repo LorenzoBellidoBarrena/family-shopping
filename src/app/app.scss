@@ -348,6 +348,12 @@ button:disabled {
   font-weight: 700;
 }
 
+.match-requested {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .match-candidate {
   display: grid;
   gap: 0.55rem;
@@ -364,6 +370,29 @@ button:disabled {
 .match-candidate > div:first-child span {
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.package-fit,
+.estimated-costs {
+  display: grid;
+  gap: 0.15rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.package-fit strong,
+.estimated-costs strong {
+  color: var(--text);
+}
+
+.package-fit[data-fit='INCOMPATIBLE'] strong {
+  color: var(--danger);
+}
+
+.estimated-costs {
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.7rem;
+  background: var(--surface);
 }
 
 .match-button {

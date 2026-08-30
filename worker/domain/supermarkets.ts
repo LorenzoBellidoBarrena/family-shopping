@@ -1,4 +1,7 @@
 import type { ProductCategory } from '../../src/shared/product-category';
+import type { PackageCalculation } from './package';
+import type { OfferType } from './supermarket-import';
+import type { Unit } from './types';
 
 export const OFFER_SUPERMARKETS = ['lidl', 'mercadona', 'carrefour', 'dia'] as const;
 
@@ -21,6 +24,10 @@ export interface CatalogOffer {
   offerPriceCents: number;
   unitPriceCents: number | null;
   promotionType: string;
+  offerType: OfferType;
+  percentage: number | null;
+  buyQuantity: number | null;
+  payQuantity: number | null;
   validFrom: string | null;
   validUntil: string | null;
   sourceUrl: string;
@@ -53,6 +60,7 @@ export interface ListMatchCandidate {
   commercialCategory: string | null;
   visualCategory: ProductCategory;
   packageLabel: string | null;
+  package: PackageCalculation;
   currentPriceCents: number | null;
   score: number;
   confidence: 'HIGH' | 'MEDIUM';
@@ -66,7 +74,7 @@ export interface ShoppingItemOfferMatch {
   shoppingItemName: string;
   category: ProductCategory;
   quantity: string;
-  unit: string;
+  unit: Unit;
   supermarketId: string | null;
   checked: boolean;
   dismissed: boolean;

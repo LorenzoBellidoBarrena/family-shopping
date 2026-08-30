@@ -307,16 +307,17 @@ Cron; no hay alertas automáticas ni comparador en esta fase.
 El 29 de agosto de 2026 Wrangler confirmó una ejecución controlada con hora CEST inyectada contra
 D1 local y la fuente Lidl real: `SUCCESS`, 53 productos, 53 precios, 84 ofertas, 42 Lidl Plus, cero
 rechazados y un único `import_run`; el segundo trigger hizo `SKIPPED_TIME`. La versión de producción
-`2d8ddce1-3d35-4a7a-b7bd-009ec85a0a9c` registró exactamente ambos Cron. No se forzó una ejecución
-remota fuera de horario: la primera ejecución de producción corresponde al siguiente disparo
-natural de las 05:00 de Madrid.
+`2d8ddce1-3d35-4a7a-b7bd-009ec85a0a9c` registró exactamente ambos Cron. El primer disparo natural
+de producción terminó `SUCCESS` el 30 de agosto de 2026 a las `03:01:16.757Z`, con 53 productos,
+53 precios, 84 ofertas y `error_code = NULL`; el trigger alternativo se omitió por hora local.
 
 ### Matching Lidl con la lista familiar
 
 La vista real añade primero «Ofertas de tu lista». Un candidato puede conservar simultáneamente su
 precio normal, oferta general y `LOYALTY_PRICE/LIDL_PLUS`; Lidl Plus siempre se muestra como una
-opción condicionada, no como el precio efectivo por defecto. El ahorro se calcula únicamente en
-céntimos respecto a un precio anterior fiable y no se multiplica por cantidad/envase.
+opción condicionada, no como el precio efectivo por defecto. El ahorro por envase se calcula en
+céntimos respecto a un precio anterior fiable; cuando el ajuste de cantidad es calculable, la capa
+posterior obtiene además los totales regular, oferta general y Lidl Plus para todos los envases.
 
 Los candidatos `MEDIUM` aparecen bajo «Revisar productos relacionados» con acciones para confirmar
 o no relacionar automáticamente. El resto de promociones vigentes continúa en «Todas las ofertas
@@ -326,5 +327,37 @@ discreto y el catálogo normal sigue visible. Los productos ya comprados no se p
 La primera revisión se realizó sobre 20 pares construidos con nombres del catálogo Lidl real
 vigente. Resultado: cero coincidencias absurdas `HIGH`; derivados como leche/batido,
 pollo/croquetas, tomate/salsa y atún/burger quedaron `LOW`, mientras términos genéricos válidos como
-pan/pan bocadillo permanecieron `MEDIUM`. Cantidades, formatos y equivalencia de envases quedan
-deliberadamente fuera de esta versión.
+pan/pan bocadillo permanecieron `MEDIUM`. El score de identidad no cambia con la cantidad.
+
+### Cantidades, formatos y costes
+
+El formato original se conserva como `package_description` y se interpreta después del matching de
+identidad. Se soportan `g`, `kg`, `ml`, `cl`, `l`, multipacks `Nx...`, unidades explícitas,
+`Aprox.` y `A granel`. Masa y volumen se calculan en enteros normalizados; `33 cl` equivale a
+`330 ml`. Textos como `Paquete` o formatos mixtos no inequívocos conservan la descripción y quedan
+`UNKNOWN`.
+
+El ajuste devuelve:
+
+- `EXACT`: la suma de envases coincide con la cantidad pedida;
+- `GOOD`: cálculo útil pero por unidades, packs, granel o cantidad aproximada;
+- `OVERBUY`: hay que comprar más cantidad, con exceso explícito;
+- `UNKNOWN`: falta semántica o precio unitario fiable;
+- `INCOMPATIBLE`: masa frente a volumen u otra dimensión incompatible.
+
+`UNIT` permite contar un envase simple. Un multipack de volumen o de unidades explícitas es
+contable; los multipacks de peso se cuentan sólo para identidades conservadoras conocidas como
+atún, paté o yogur. `PACK` siempre cuenta envases comerciales, no sus unidades internas. Un alias
+confirmado conserva el producto preferido aunque otro formato pudiera encajar mejor.
+
+El coste regular multiplica envases por el precio regular. La oferta general usa el precio publicado
+o las reglas estructuradas de `BUY_X_PAY_Y`/`SECOND_UNIT_DISCOUNT`; Lidl Plus sigue siendo un
+escenario separado. Cashback no reduce el pago inmediato. En granel sólo se calcula si D1 contiene
+un precio unitario compatible: se redondea al céntimo más próximo, mitad hacia arriba, y se etiqueta
+estimado. El catálogo Lidl vigente del 30 de agosto no publica precio unitario estructurado para sus
+filas a granel, por lo que esos costes quedan correctamente desconocidos.
+
+Esta capa se desplegó en la versión `c0392240-a475-43cb-9389-ebe279e54069`. La migración
+`0008_package_descriptions.sql` está aplicada en D1 remota y el backfill dejó descripción en los
+53 productos Lidl existentes. No se modificaron discovery, campañas, precios, Cron ni otros
+proveedores.

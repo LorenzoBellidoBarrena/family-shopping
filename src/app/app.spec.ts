@@ -104,6 +104,10 @@ class FakeShoppingApi {
       offerPriceCents: 89,
       unitPriceCents: 89,
       promotionType: 'Precio promocional de demostración',
+      offerType: 'DIRECT_DISCOUNT',
+      percentage: null,
+      buyQuantity: null,
+      payQuantity: null,
       validFrom: '2026-08-24',
       validUntil: '2026-09-01',
       sourceUrl: 'https://www.lidl.es/',
@@ -154,6 +158,32 @@ class FakeShoppingApi {
             commercialCategory: 'Lácteos',
             visualCategory: 'DAIRY',
             packageLabel: '1 l',
+            package: {
+              descriptor: {
+                description: '1 l',
+                type: 'MEASURED',
+                packCount: 1,
+                amountPerPack: 1000,
+                unit: 'ML',
+                totalAmount: 1000,
+                approximate: false,
+              },
+              fit: 'GOOD',
+              packsNeeded: 6,
+              requestedAmount: 6,
+              purchasedAmount: 6,
+              excessAmount: 0,
+              unit: 'COUNT',
+              approximate: false,
+              costs: {
+                regularCostCents: 630,
+                generalOfferCostCents: 534,
+                lidlPlusCostCents:
+                  this.offerData[0].lidlPlusPriceCents === null
+                    ? null
+                    : this.offerData[0].lidlPlusPriceCents * 6,
+              },
+            },
             currentPriceCents: 105,
             score: 65,
             confidence: 'MEDIUM',
@@ -447,6 +477,9 @@ describe('Shopping list interface', () => {
     expect(api.getOffers).toHaveBeenCalledWith(undefined);
     expect(card.textContent).toContain('Leche entera 1 litro');
     expect(card.textContent).toContain('Leche');
+    expect(card.textContent).toContain('Necesitarías 6 envases');
+    expect(card.textContent).toContain('Normal: 6,30');
+    expect(card.textContent).toContain('Oferta: 5,34');
     expect(card.textContent).toContain('Ahorras');
 
     button('DIA').click();
@@ -477,7 +510,7 @@ describe('Shopping list interface', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Datos reales · Lidl');
     expect(text).toContain('Badajoz');
-    expect(text).toContain('Lidl Plus: 0,79');
+    expect(text).toContain('Con Lidl Plus: 4,74');
     expect(text).not.toContain('Los precios no son datos comerciales reales');
   });
 

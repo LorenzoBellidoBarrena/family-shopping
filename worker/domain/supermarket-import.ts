@@ -44,6 +44,7 @@ export interface ImportedProduct {
   imageUrl: string | null;
   packageQuantity: number | null;
   packageUnit: string | null;
+  packageDescription?: string | null;
   priceCents: number;
   unitPriceCents: number | null;
   unitPriceUnit: string | null;
@@ -62,6 +63,7 @@ export interface ParsedSupermarketProduct {
   imageUrl?: string;
   packageQuantity?: number;
   packageUnit?: string;
+  packageDescription?: string;
   priceText: string;
   normalPriceText?: string;
   unitPriceText?: string;

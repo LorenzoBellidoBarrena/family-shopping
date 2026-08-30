@@ -52,6 +52,7 @@ describe('LidlProvider', () => {
       priceCents: 235,
       packageQuantity: 750,
       packageUnit: 'g',
+      packageDescription: '750g',
       channel: 'STORE',
       geographicScope: 'REGIONAL',
       offers: [
@@ -86,6 +87,7 @@ describe('LidlProvider', () => {
       priceCents: 420,
       packageQuantity: null,
       packageUnit: '12x33 cl',
+      packageDescription: '12x33 cl',
       offers: [{ type: 'LOYALTY_PRICE', offerPriceCents: 329, normalPriceCents: 420 }],
     });
     expect(product.offers[0]).toMatchObject({ validFrom: '2026-08-31', validUntil: '2026-09-06' });

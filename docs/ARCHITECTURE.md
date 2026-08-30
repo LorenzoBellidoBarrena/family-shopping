@@ -47,6 +47,7 @@ El store reemplaza items en su índice actual al marcar o editar, por lo que nun
 - `services/list-offer-matching-service.ts`: genera candidatos Lidl desde D1, aplica preferencias y
   separa sugerencia de match automático.
 - `services/product-matching.ts`: tokenización, aliases, contradicciones y scoring puro/explicable.
+- `services/package-matching.ts`: parser de envases, conversiones, ajuste y costes promocionales.
 - `repositories/product-match-repository.ts`: catálogo actual en bloque y preferencias por hogar.
 - `providers/*-provider.ts`: adaptadores independientes de Lidl, Mercadona, Carrefour y DIA.
 - `domain/supermarkets.ts`: contrato `SupermarketProvider` y tipos de catálogo independientes.
@@ -92,6 +93,26 @@ La UI abre con «Ofertas de tu lista», prioriza pendientes con oferta activa y 
 filas general y Lidl Plus de un mismo producto. A continuación muestra candidatos que requieren
 revisión, luego el resto de ofertas Lidl y finalmente las próximas. Una selección manual aprende
 para ciclos futuros; quitarla no modifica nunca el shopping item.
+
+## Cantidades y formatos Lidl
+
+La identidad y el ajuste de envase son capas independientes. Después de filtrar candidatos, un
+`PackageDescriptor` interpreta el texto persistido: envase medido, multipack, unidades explícitas,
+granel o formato desconocido. Masa se normaliza a gramos y volumen a mililitros; `cl` se convierte
+inmediatamente a `ml`. La cantidad familiar sigue almacenada en milésimas y no se reescribe.
+
+`calculatePackageFit` devuelve `EXACT`, `GOOD`, `OVERBUY`, `UNKNOWN` o `INCOMPATIBLE`, número de
+envases, cantidad comprada y exceso cuando son fiables. Un peso aproximado nunca publica un exceso
+exacto. `UNIT` puede representar un envase individual; los multipacks sólo se cuentan cuando el
+formato/identidad hacen inequívocas sus unidades internas. `PACK` siempre representa paquetes de
+venta y no unidades interiores.
+
+`PromotionCalculator` usa enteros: precio publicado para descuentos simples/porcentaje, grupos
+completos para `BUY_X_PAY_Y` y descuento sólo en cada segunda unidad para
+`SECOND_UNIT_DISCOUNT`. Cashback no se trata como ahorro inmediato. Regular, oferta general y Lidl
+Plus permanecen escenarios separados. Para granel se usa precio unitario únicamente si la fuente
+publica una unidad compatible; el resultado se redondea al céntimo más próximo, mitad hacia arriba,
+y se etiqueta estimado.
 
 D1 es la fuente persistente de verdad. Los cierres, la creación del siguiente ciclo y el copiado de
 pendientes se confirman en un único `D1.batch`. El Durable Object no guarda una copia del dominio:

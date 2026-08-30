@@ -215,6 +215,9 @@
                       <span>No automático</span>
                     }
                   </div>
+                  <p class="match-requested">
+                    Necesitas: {{ match.quantity }} {{ formatUnit(match.quantity, match.unit) }}
+                  </p>
                   @for (candidate of match.candidates; track candidate.externalProductId) {
                     @if (candidateOffer(candidate); as offer) {
                       <div class="match-candidate">
@@ -226,22 +229,68 @@
                           </span>
                           <span>{{ confidenceLabel(candidate.confidence) }}</span>
                         </div>
-                        <div class="offer-price">
-                          <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
-                          @if (offer.normalPriceCents !== null) {
-                            <span>{{ formatPrice(offer.normalPriceCents) }}</span>
+                        <div class="package-fit" [attr.data-fit]="candidate.package.fit">
+                          <strong>{{ packageFitLabel(candidate) }}</strong>
+                          @if (packageNeedLabel(candidate); as needed) {
+                            <span>{{ needed }}</span>
+                          }
+                          @if (
+                            packageAmountLabel(
+                              candidate.package.purchasedAmount,
+                              candidate.package.unit
+                            );
+                            as purchased
+                          ) {
+                            <span>
+                              Compra: {{ candidate.package.approximate ? 'aprox. ' : ''
+                              }}{{ purchased }}
+                            </span>
+                          }
+                          @if (
+                            packageAmountLabel(
+                              candidate.package.excessAmount,
+                              candidate.package.unit
+                            );
+                            as excess
+                          ) {
+                            <span>Exceso: {{ excess }}</span>
                           }
                         </div>
-                        @if (
-                          savingCents(offer.normalPriceCents, offer.offerPriceCents);
-                          as saving
-                        ) {
-                          <p class="saving-note">🔥 Ahorras {{ formatPrice(saving) }}</p>
-                        }
-                        @if (offer.lidlPlusPriceCents !== null) {
-                          <p class="loyalty-note">
-                            Con Lidl Plus: {{ formatPrice(offer.lidlPlusPriceCents) }}
-                          </p>
+                        @if (candidate.package.costs.regularCostCents !== null) {
+                          <div class="estimated-costs">
+                            <span>
+                              Normal:
+                              {{ formatPrice(candidate.package.costs.regularCostCents) }}
+                            </span>
+                            @if (candidate.package.costs.generalOfferCostCents !== null) {
+                              <strong>
+                                Oferta:
+                                {{ formatPrice(candidate.package.costs.generalOfferCostCents) }}
+                              </strong>
+                            }
+                            @if (candidate.package.costs.lidlPlusCostCents !== null) {
+                              <span class="loyalty-note">
+                                Con Lidl Plus:
+                                {{ formatPrice(candidate.package.costs.lidlPlusCostCents) }}
+                              </span>
+                            }
+                          </div>
+                          @if (
+                            estimatedSavingCents(
+                              candidate.package.costs.regularCostCents,
+                              candidate.package.costs.generalOfferCostCents
+                            );
+                            as saving
+                          ) {
+                            <p class="saving-note">🔥 Ahorras {{ formatPrice(saving) }}</p>
+                          }
+                        } @else {
+                          <div class="offer-price">
+                            <strong>Por envase: {{ formatPrice(offer.offerPriceCents) }}</strong>
+                            @if (offer.normalPriceCents !== null) {
+                              <span>Antes: {{ formatPrice(offer.normalPriceCents) }}</span>
+                            }
+                          </div>
                         }
                         <button
                           class="secondary-button match-button"
@@ -289,6 +338,16 @@
                       <small>
                         {{ candidate.packageLabel || 'Formato no publicado' }} ·
                         {{ confidenceLabel(candidate.confidence) }}
+                        @if (packageNeedLabel(candidate); as needed) {
+                          · {{ needed }}
+                        }
+                        @if (candidate.package.costs.generalOfferCostCents !== null) {
+                          · Total oferta
+                          {{ formatPrice(candidate.package.costs.generalOfferCostCents) }}
+                        } @else if (candidate.package.costs.regularCostCents !== null) {
+                          · Total estimado
+                          {{ formatPrice(candidate.package.costs.regularCostCents) }}
+                        }
                         @if (candidate.currentPriceCents !== null) {
                           · Precio catálogo {{ formatPrice(candidate.currentPriceCents) }}
                         }

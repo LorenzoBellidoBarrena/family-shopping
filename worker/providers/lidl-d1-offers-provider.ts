@@ -1,4 +1,5 @@
 import type { ProductCategory } from '../../src/shared/product-category';
+import type { OfferType } from '../domain/supermarket-import';
 import type { CatalogOffer, SupermarketProvider } from '../domain/supermarkets';
 
 interface OfferRow {
@@ -11,11 +12,16 @@ interface OfferRow {
   visual_category: ProductCategory;
   package_quantity: number | null;
   package_unit: string | null;
+  package_description: string | null;
   base_price_cents: number;
   unit_price_cents: number | null;
   normal_price_cents: number | null;
   offer_price_cents: number;
   promotion_type: string;
+  offer_type: OfferType;
+  percentage: number | null;
+  buy_quantity: number | null;
+  pay_quantity: number | null;
   valid_from: string | null;
   valid_until: string | null;
   source_url: string;
@@ -26,7 +32,12 @@ interface OfferRow {
   observed_at: string;
 }
 
-const packageLabel = (quantity: number | null, unit: string | null): string | null => {
+const packageLabel = (
+  description: string | null,
+  quantity: number | null,
+  unit: string | null,
+): string | null => {
+  if (description) return description;
   if (quantity === null) return unit;
   return `${String(quantity).replace('.', ',')} ${unit ?? ''}`.trim();
 };
@@ -43,9 +54,10 @@ export class LidlD1OffersProvider implements SupermarketProvider {
     const { results } = await this.db
       .prepare(
         `SELECT o.id, o.product_id, ep.name, ep.normalized_name, ep.brand, ep.category,
-                ep.visual_category, ep.package_quantity, ep.package_unit,
+                ep.visual_category, ep.package_quantity, ep.package_unit, ep.package_description,
                 pp.price_cents AS base_price_cents, pp.unit_price_cents,
                 o.normal_price_cents, o.offer_price_cents, o.promotion_type,
+                o.offer_type, o.percentage, o.buy_quantity, o.pay_quantity,
                 o.valid_from, o.valid_until, o.source_url, o.requires_loyalty_card,
                 o.loyalty_program, o.channel, o.geographic_scope, o.observed_at
          FROM offers o
@@ -73,6 +85,10 @@ export class LidlD1OffersProvider implements SupermarketProvider {
           existing.normalPriceCents = row.normal_price_cents;
           existing.offerPriceCents = row.offer_price_cents;
           existing.promotionType = row.promotion_type;
+          existing.offerType = row.offer_type;
+          existing.percentage = row.percentage;
+          existing.buyQuantity = row.buy_quantity;
+          existing.payQuantity = row.pay_quantity;
         }
         if (row.observed_at > existing.observedAt) existing.observedAt = row.observed_at;
         continue;
@@ -89,11 +105,15 @@ export class LidlD1OffersProvider implements SupermarketProvider {
         brand: row.brand,
         category: row.category,
         visualCategory: row.visual_category,
-        packageLabel: packageLabel(row.package_quantity, row.package_unit),
+        packageLabel: packageLabel(row.package_description, row.package_quantity, row.package_unit),
         normalPriceCents: row.normal_price_cents,
         offerPriceCents: isLidlPlus ? row.base_price_cents : row.offer_price_cents,
         unitPriceCents: row.unit_price_cents,
         promotionType: isLidlPlus ? 'Precio Lidl Plus' : row.promotion_type,
+        offerType: row.offer_type,
+        percentage: row.percentage,
+        buyQuantity: row.buy_quantity,
+        payQuantity: row.pay_quantity,
         validFrom: row.valid_from,
         validUntil: row.valid_until,
         sourceUrl: row.source_url,

@@ -9,7 +9,10 @@ export interface CatalogProductForMatching {
   visualCategory: ProductCategory;
   packageQuantity: number | null;
   packageUnit: string | null;
+  packageDescription: string | null;
   currentPriceCents: number | null;
+  unitPriceCents: number | null;
+  unitPriceUnit: string | null;
 }
 
 export interface HouseholdProductMatchPreference {
@@ -27,7 +30,10 @@ interface ProductRow {
   visual_category: ProductCategory;
   package_quantity: number | null;
   package_unit: string | null;
+  package_description: string | null;
   current_price_cents: number | null;
+  unit_price_cents: number | null;
+  unit_price_unit: string | null;
 }
 
 const mapProduct = (row: ProductRow): CatalogProductForMatching => ({
@@ -39,7 +45,10 @@ const mapProduct = (row: ProductRow): CatalogProductForMatching => ({
   visualCategory: row.visual_category,
   packageQuantity: row.package_quantity,
   packageUnit: row.package_unit,
+  packageDescription: row.package_description,
   currentPriceCents: row.current_price_cents,
+  unitPriceCents: row.unit_price_cents,
+  unitPriceUnit: row.unit_price_unit,
 });
 
 const currentLidlCatalogWhere = `
@@ -62,10 +71,16 @@ export class ProductMatchRepository {
     const { results } = await this.db
       .prepare(
         `SELECT ep.id, ep.name, ep.normalized_name, ep.brand, ep.category, ep.visual_category,
-                ep.package_quantity, ep.package_unit,
+                ep.package_quantity, ep.package_unit, ep.package_description,
                 (SELECT pp.price_cents FROM product_prices pp
                  WHERE pp.product_id = ep.id
-                 ORDER BY pp.observed_at DESC, pp.id DESC LIMIT 1) AS current_price_cents
+                 ORDER BY pp.observed_at DESC, pp.id DESC LIMIT 1) AS current_price_cents,
+                (SELECT pp.unit_price_cents FROM product_prices pp
+                 WHERE pp.product_id = ep.id
+                 ORDER BY pp.observed_at DESC, pp.id DESC LIMIT 1) AS unit_price_cents,
+                (SELECT pp.unit_price_unit FROM product_prices pp
+                 WHERE pp.product_id = ep.id
+                 ORDER BY pp.observed_at DESC, pp.id DESC LIMIT 1) AS unit_price_unit
          FROM external_products ep
          WHERE ${currentLidlCatalogWhere}
          ORDER BY ep.normalized_name, ep.id`,
@@ -80,10 +95,16 @@ export class ProductMatchRepository {
     const row = await this.db
       .prepare(
         `SELECT ep.id, ep.name, ep.normalized_name, ep.brand, ep.category, ep.visual_category,
-                ep.package_quantity, ep.package_unit,
+                ep.package_quantity, ep.package_unit, ep.package_description,
                 (SELECT pp.price_cents FROM product_prices pp
                  WHERE pp.product_id = ep.id
-                 ORDER BY pp.observed_at DESC, pp.id DESC LIMIT 1) AS current_price_cents
+                 ORDER BY pp.observed_at DESC, pp.id DESC LIMIT 1) AS current_price_cents,
+                (SELECT pp.unit_price_cents FROM product_prices pp
+                 WHERE pp.product_id = ep.id
+                 ORDER BY pp.observed_at DESC, pp.id DESC LIMIT 1) AS unit_price_cents,
+                (SELECT pp.unit_price_unit FROM product_prices pp
+                 WHERE pp.product_id = ep.id
+                 ORDER BY pp.observed_at DESC, pp.id DESC LIMIT 1) AS unit_price_unit
          FROM external_products ep
          WHERE ep.id = ? AND ${currentLidlCatalogWhere}`,
       )

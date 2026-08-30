@@ -12,11 +12,53 @@ import {
   ProductMatchRepository,
   type CatalogProductForMatching,
 } from '../repositories/product-match-repository';
+import { normalizeProductName } from '../../src/shared/product-name';
+import { calculatePackageFit, parsePackageDescription } from './package-matching';
 import { scoreProductMatch } from './product-matching';
 
 const packageLabel = (product: CatalogProductForMatching): string | null => {
+  if (product.packageDescription) return product.packageDescription;
   if (product.packageQuantity === null) return product.packageUnit;
   return `${String(product.packageQuantity).replace('.', ',')} ${product.packageUnit ?? ''}`.trim();
+};
+
+const countableMultipack = (product: CatalogProductForMatching): boolean => {
+  const label = packageLabel(product);
+  const descriptor = parsePackageDescription(label);
+  if ((descriptor.packCount ?? 1) <= 1) return false;
+  if (descriptor.unit === 'COUNT') return true;
+  if (descriptor.unit === 'ML') return true;
+  const name = new Set(normalizeProductName(product.name).split(' '));
+  return ['atun', 'pate', 'yogur'].some((token) => name.has(token));
+};
+
+const packagePricing = (product: CatalogProductForMatching, activeOffers: CatalogOffer[]) => {
+  const general = activeOffers.find((offer) => !offer.requiresLoyaltyCard) ?? null;
+  const normalPrices = activeOffers.flatMap((offer) =>
+    offer.normalPriceCents === null ? [] : [offer.normalPriceCents],
+  );
+  return {
+    regularUnitPriceCents:
+      normalPrices.length > 0 ? Math.max(...normalPrices) : product.currentPriceCents,
+    generalOffer:
+      general === null
+        ? null
+        : {
+            type: general.offerType,
+            publishedOfferPriceCents: general.offerPriceCents,
+            percentage: general.percentage,
+            buyQuantity: general.buyQuantity,
+            payQuantity: general.payQuantity,
+          },
+    lidlPlusUnitPriceCents: activeOffers.reduce<number | null>((lowest, offer) => {
+      if (offer.lidlPlusPriceCents === null) return lowest;
+      return lowest === null
+        ? offer.lidlPlusPriceCents
+        : Math.min(lowest, offer.lidlPlusPriceCents);
+    }, null),
+    unitPriceCents: product.unitPriceCents,
+    unitPriceUnit: product.unitPriceUnit,
+  };
 };
 
 const lidlAllowed = (item: ShoppingItem): boolean =>
@@ -81,6 +123,8 @@ export class ListOfferMatchingService {
             preferred,
           );
           if (scored.confidence === 'LOW') return null;
+          const productOffers = activeOffersByProduct.get(product.externalProductId) ?? [];
+          const label = packageLabel(product);
           return {
             externalProductId: product.externalProductId,
             productName: product.name,
@@ -88,13 +132,20 @@ export class ListOfferMatchingService {
             brand: product.brand,
             commercialCategory: product.commercialCategory,
             visualCategory: product.visualCategory,
-            packageLabel: packageLabel(product),
+            packageLabel: label,
+            package: calculatePackageFit(
+              item.quantity,
+              item.unit,
+              parsePackageDescription(label),
+              packagePricing(product, productOffers),
+              countableMultipack(product),
+            ),
             currentPriceCents: product.currentPriceCents,
             score: scored.score,
             confidence: scored.confidence,
             reasons: scored.reasons,
             preferred,
-            activeOffers: activeOffersByProduct.get(product.externalProductId) ?? [],
+            activeOffers: productOffers,
           };
         })
         .filter((candidate): candidate is ListMatchCandidate => candidate !== null)

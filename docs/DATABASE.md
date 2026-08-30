@@ -2,9 +2,9 @@
 
 Las migraciones son `0001_initial_schema.sql`, `0002_realtime_revisions.sql`,
 `0003_supermarket_catalog.sql`, `0004_product_categories.sql`,
-`0005_carrefour_import_foundation.sql`, `0006_nullable_offer_validity.sql` y
-`0007_household_product_matches.sql`. Se validan con el runtime de pruebas oficial de Workers y D1
-local.
+`0005_carrefour_import_foundation.sql`, `0006_nullable_offer_validity.sql`,
+`0007_household_product_matches.sql` y `0008_package_descriptions.sql`. Se validan con el runtime
+de pruebas oficial de Workers y D1 local.
 
 ## Tablas
 
@@ -19,7 +19,7 @@ local.
 - `pairing_codes`: hashes de códigos temporales, expiración y marca de uso.
 - `household_revisions`: secuencia creciente de eventos de sincronización por hogar.
 - `stores`: establecimientos o ámbitos comerciales, con geolocalización opcional.
-- `external_products`: catálogo publicado por cadena, EAN opcional y última observación.
+- `external_products`: catálogo publicado, EAN opcional, formato original y última observación.
 - `product_aliases`: equivalencias léxicas globales y matches Lidl aprendidos aislados por hogar.
 - `store_products`: relación de publicación producto/tienda; no representa stock.
 - `product_prices`: histórico de precios en céntimos enteros.
@@ -99,6 +99,11 @@ La relación se guarda por hogar y nombre normalizado, no por `shopping_item_id`
 a una lista nueva, a Habituales y a `CARRY_PENDING`. Los aliases léxicos globales mantienen su
 índice único parcial independiente y siguen sin pertenecer a un hogar.
 
+`0008_package_descriptions.sql` añade `external_products.package_description` para conservar el
+texto original publicado (`3x65 g`, `Aprox. 400 g`, `A granel`). Hace un backfill seguro desde
+`package_quantity/package_unit`; los imports Lidl posteriores guardan el texto exacto. Los cálculos
+de envases, exceso y coste siguen siendo derivados en runtime y no crean columnas.
+
 ## Atomicidad
 
 - Bootstrap: household, singleton, primer device y primer ciclo en un lote.
@@ -115,7 +120,10 @@ ordenar y deduplicar avisos; nunca sustituye la lectura canónica del ciclo acti
 npm run db:setup:local
 ```
 
-El seed `database/seeds/0001_supermarkets.sql` es idempotente. Las migraciones `0001`–`0007` están
-aplicadas local y remotamente. `0007` añade exclusivamente la persistencia de matching familiar;
-no altera items, ciclos, ofertas, precios ni imports. Los fixtures viven sólo en código/pruebas y
-nunca se cargan mediante una migración.
+El seed `database/seeds/0001_supermarkets.sql` es idempotente. `0007` añade exclusivamente la
+persistencia de matching familiar y `0008` conserva la descripción del envase; ninguna altera
+items, ciclos, precios u ofertas. Los fixtures viven sólo en código/pruebas y nunca se cargan
+mediante una migración.
+
+Las migraciones `0001`–`0008` están aplicadas tanto en D1 local como en
+`family-shopping-db` remota; no quedan migraciones pendientes al cierre del 30 de agosto de 2026.

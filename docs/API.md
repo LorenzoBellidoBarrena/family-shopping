@@ -69,6 +69,38 @@ el precio vigente y todas las ofertas activas del candidato, incluida la oferta 
 cuando ambas existen. Un match heurístico sólo se elige automáticamente con confianza `HIGH` y una
 ventaja suficiente sobre el segundo candidato. Los resultados ambiguos permanecen como sugerencias.
 
+Cada candidato incluye además un cálculo `package` independiente del score de identidad:
+
+```json
+{
+  "descriptor": {
+    "description": "750 g",
+    "type": "MEASURED",
+    "packCount": 1,
+    "amountPerPack": 750,
+    "unit": "G",
+    "totalAmount": 750,
+    "approximate": false
+  },
+  "fit": "OVERBUY",
+  "packsNeeded": 2,
+  "requestedAmount": 1000,
+  "purchasedAmount": 1500,
+  "excessAmount": 500,
+  "unit": "G",
+  "costs": {
+    "regularCostCents": 598,
+    "generalOfferCostCents": 470,
+    "lidlPlusCostCents": 378
+  }
+}
+```
+
+`fit` puede ser `EXACT`, `GOOD`, `OVERBUY`, `UNKNOWN` o `INCOMPATIBLE`. Los importes son escenarios
+separados y siempre enteros en céntimos. `UNKNOWN` conserva el match de identidad y el texto del
+formato, pero no inventa número de envases ni coste. Las promociones futuras/caducadas no se usan en
+el cálculo de la sección actual.
+
 `PUT /api/items/:id/product-match` recibe:
 
 ```json

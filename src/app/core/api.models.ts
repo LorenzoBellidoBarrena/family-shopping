@@ -81,6 +81,10 @@ export interface CatalogOffer {
   offerPriceCents: number;
   unitPriceCents: number | null;
   promotionType: string;
+  offerType: OfferType;
+  percentage: number | null;
+  buyQuantity: number | null;
+  payQuantity: number | null;
   validFrom: string | null;
   validUntil: string | null;
   sourceUrl: string;
@@ -104,6 +108,39 @@ export interface OffersResponse {
 }
 
 export type MatchConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+export type OfferType =
+  | 'DIRECT_DISCOUNT'
+  | 'PERCENTAGE_DISCOUNT'
+  | 'BUY_X_PAY_Y'
+  | 'SECOND_UNIT_DISCOUNT'
+  | 'CASHBACK'
+  | 'LOYALTY_PRICE'
+  | 'SPECIAL_PRICE';
+export type PackageFit = 'EXACT' | 'GOOD' | 'OVERBUY' | 'UNKNOWN' | 'INCOMPATIBLE';
+
+export interface PackageCalculation {
+  descriptor: {
+    description: string | null;
+    type: 'MEASURED' | 'BULK' | 'UNKNOWN';
+    packCount: number | null;
+    amountPerPack: number | null;
+    unit: 'G' | 'ML' | 'COUNT' | null;
+    totalAmount: number | null;
+    approximate: boolean;
+  };
+  fit: PackageFit;
+  packsNeeded: number | null;
+  requestedAmount: number | null;
+  purchasedAmount: number | null;
+  excessAmount: number | null;
+  unit: 'G' | 'ML' | 'COUNT' | 'PACK' | null;
+  approximate: boolean;
+  costs: {
+    regularCostCents: number | null;
+    generalOfferCostCents: number | null;
+    lidlPlusCostCents: number | null;
+  };
+}
 
 export interface ListMatchCandidate {
   externalProductId: string;
@@ -113,6 +150,7 @@ export interface ListMatchCandidate {
   commercialCategory: string | null;
   visualCategory: ProductCategory;
   packageLabel: string | null;
+  package: PackageCalculation;
   currentPriceCents: number | null;
   score: number;
   confidence: Exclude<MatchConfidence, 'LOW'>;

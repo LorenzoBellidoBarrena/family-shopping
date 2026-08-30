@@ -655,7 +655,12 @@ describe('supermarket offers module', () => {
       matchedItems: {
         shoppingItemId: string;
         automaticMatchExternalProductId: string | null;
-        candidates: { externalProductId: string; confidence: string; activeOffers: unknown[] }[];
+        candidates: {
+          externalProductId: string;
+          confidence: string;
+          activeOffers: unknown[];
+          package: unknown;
+        }[];
       }[];
     }>(suggestions);
 
@@ -669,6 +674,21 @@ describe('supermarket offers module', () => {
           externalProductId: 'milk-semi',
           confidence: 'MEDIUM',
           activeOffers: expect.any(Array),
+          package: {
+            fit: 'GOOD',
+            packsNeeded: 1,
+            requestedAmount: 1,
+            purchasedAmount: 1,
+            excessAmount: 0,
+            unit: 'COUNT',
+            approximate: false,
+            descriptor: expect.objectContaining({ description: '1 l', totalAmount: 1000 }),
+            costs: {
+              regularCostCents: 99,
+              generalOfferCostCents: 89,
+              lidlPlusCostCents: null,
+            },
+          },
         },
       ],
     });

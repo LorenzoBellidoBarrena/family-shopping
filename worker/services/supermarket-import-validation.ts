@@ -42,6 +42,9 @@ export const validateImportedProduct = (product: ImportedProduct): ImportedProdu
   ) {
     throw new Error('IMPORT_INVALID_PACKAGE');
   }
+  if (product.packageDescription !== undefined && (product.packageDescription?.length ?? 0) > 120) {
+    throw new Error('IMPORT_INVALID_PACKAGE');
+  }
   if (
     !OFFER_CHANNELS.includes(product.channel) ||
     !GEOGRAPHIC_SCOPES.includes(product.geographicScope)

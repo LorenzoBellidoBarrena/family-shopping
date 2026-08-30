@@ -1,12 +1,32 @@
 # Progreso
 
-## Fase actual: matching entre lista familiar y ofertas Lidl
+## Fase actual: matching de cantidades y envases Lidl
 
-Estado: matching determinista, conservador y aprendible implementado sobre el catálogo real Lidl
-persistido en D1. La lista familiar conserva todos sus campos y rendimiento; la relación se calcula
-al abrir Ofertas. La automatización diaria continúa exactamente a las 05:00 de `Europe/Madrid`.
+Estado: la identidad Lidl mantiene su scoring validado y añade una capa separada para cantidad,
+formato, envases necesarios, exceso y costes regular/oferta/Lidl Plus. La lista familiar conserva
+todos sus campos y rendimiento; los cálculos se hacen al abrir Ofertas sobre D1. La automatización
+diaria continúa exactamente a las 05:00 de `Europe/Madrid`.
 
 ### Implementado
+
+- `PackageDescriptor` determinista para `750 g`, `1 kg`, multipacks como `3x65 g` y `18x33 cl`,
+  unidades explícitas, `Aprox.`, `A granel` y formatos desconocidos. `cl` se normaliza a `ml`.
+- Capa de ajuste independiente del score de identidad: `EXACT`, `GOOD`, `OVERBUY`, `UNKNOWN` e
+  `INCOMPATIBLE`, con envases, cantidad comprada y exceso sólo cuando son fiables.
+- `UNIT` cuenta envases simples; multipacks sólo cuando su formato/identidad permite afirmar las
+  unidades interiores. `PACK` conserva semántica propia. `KG/G` y `L/ML` se convierten de forma
+  segura usando la cantidad familiar ya almacenada en milésimas.
+- `PromotionCalculator` entero para precio publicado, porcentaje, `BUY_X_PAY_Y`, segunda unidad y
+  loyalty. Regular, oferta general y Lidl Plus se devuelven como escenarios separados; cashback no
+  se presenta como descuento inmediato.
+- Granel calculable sólo con precio unitario compatible, redondeado al céntimo más próximo con
+  mitad hacia arriba y siempre marcado como estimado. Sin precio unitario queda `UNKNOWN`.
+- Migración aditiva `0008_package_descriptions.sql`: conserva el formato original del catálogo y
+  hace backfill seguro; packs, excesos y costes no se persisten.
+- UI ampliada con cantidad solicitada, formato, envases necesarios, compra/exceso y total estimado,
+  sin saturar candidatos desconocidos ni incompatibles.
+- Revisión de 10 formatos/precios del catálogo Lidl real vigente y casos adicionales de granel/
+  formato desconocido, sin modificar la lista familiar de producción.
 
 - `GET /api/offers/for-list` autenticado genera hasta cinco candidatos por item pendiente usando
   sólo el último catálogo Lidl válido de D1; no hace fetch remoto ni acepta household arbitrario.
@@ -154,8 +174,9 @@ al abrir Ofertas. La automatización diaria continúa exactamente a las 05:00 de
 
 - 33 pruebas Angular, incluidas clasificación, emojis, accesibilidad, orden, caché offline,
   respuesta optimista, rollback y confirmación manual de un candidato Lidl.
-- 112 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import,
-  idempotencia, Cron y 40 casos nuevos de matching/API; 145 pruebas en total.
+- 152 pruebas Worker/D1, incluidas lista, WebSocket, parsers Carrefour/DIA/Lidl, seguridad, import,
+  idempotencia, Cron, matching de identidad y 40 casos nuevos de cantidad/envase; 185 pruebas en
+  total.
 - Aprendizaje entre ciclos, corrección, descarte, catálogo desaparecido, dos hogares aislados,
   supermercado `ANY`/LIDL/otro, oferta general + Lidl Plus y endpoint sin autenticar cubiertos.
 - Revisión de falsos positivos con 20 pares del catálogo real: 20/20 correctos y ningún `HIGH`
@@ -193,6 +214,18 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
   productos Lidl, idénticos al checkpoint previo. Los cinco items están pendientes; el catálogo
   actual produce 0 matches/0 con oferta/5 unmatched: sólo existe `Pan bocadillo`, pero Pan conserva
   Mercadona, y `empanada`/`pañuelos` no coinciden por substring.
+- Matching de cantidades y envases desplegado el 30 de agosto de 2026 en la versión
+  `c0392240-a475-43cb-9389-ebe279e54069`; bundle `main-NIQWXEKJ.js`. La migración aditiva
+  `0008_package_descriptions.sql` quedó aplicada local y remotamente, sin migraciones pendientes.
+  Los 53 productos Lidl remotos conservan una descripción de envase tras el backfill; el texto
+  original exacto, incluido `Aprox.`, se renovará con los imports posteriores.
+- Smoke posterior: shell y `/pair` `200`, salud `200`, API desconocida JSON `404`, ofertas y
+  matching sin token `401`, `/ws` sin upgrade `426`, manifest y service worker `200`. Los conteos
+  familiares permanecieron en 1 hogar, 2 dispositivos, 1 ciclo activo, 5 items y 5 preferencias;
+  el catálogo permaneció en 53 productos y 84 ofertas.
+- El primer disparo natural de las 05:00 de Madrid terminó `SUCCESS` el 30 de agosto de 2026 a las
+  `03:01:16.757Z`: 53 productos, 53 precios, 84 ofertas y ningún error. Cloudflare conserva
+  exactamente los Cron `0 3 * * *` y `0 4 * * *`; no se modificó su programación.
 - Smoke posterior al Cron: shell y `/pair` `200`, salud `200`, API desconocida `404`, ofertas sin
   token `401` y `/ws` sin upgrade `426`. Los conteos familiares permanecieron en 1 hogar, 2
   dispositivos, 1 ciclo activo, 5 items y 5 preferencias. El catálogo remoto siguió en 53
@@ -202,7 +235,7 @@ hogar, los dos dispositivos, el ciclo activo y los productos existentes.
 - Preview URLs deshabilitadas explícitamente.
 - Smoke tests: shell, manifest, service worker, `/pair` y salud responden `200`; API privada sin
   token y upgrade WebSocket sin credencial responden `401`; `/ws` sin upgrade responde `426`.
-- Migración remota `0003_supermarket_catalog.sql` aplicada; no quedan migraciones pendientes.
+- Migraciones remotas `0001`–`0008` aplicadas; no quedan migraciones pendientes.
 - Prompt 6 desplegado en `https://family-shopping.lorenzo-bellido-b.workers.dev`.
 - Versión de Worker: `0a5998f3-14f1-4c42-95aa-6c18cfd11e0b`.
 - Smoke de producción: shell, JS, CSS y salud responden `200`; bundles contienen la vista y API de

@@ -7,6 +7,7 @@ import QRCode from 'qrcode';
 import type {
   OfferSupermarketId,
   ListMatchCandidate,
+  PackageCalculation,
   PairingDetails,
   ProductPreference,
   ProductCategory,
@@ -295,6 +296,44 @@ export class App implements OnInit {
 
   protected candidateOffer(candidate: ListMatchCandidate) {
     return candidate.activeOffers[0] ?? null;
+  }
+
+  protected packageNeedLabel(candidate: ListMatchCandidate): string | null {
+    const packs = candidate.package.packsNeeded;
+    if (packs === null) return null;
+    return `Necesitarías ${packs} ${packs === 1 ? 'envase' : 'envases'}`;
+  }
+
+  protected packageFitLabel(candidate: ListMatchCandidate): string {
+    const labels: Record<ListMatchCandidate['package']['fit'], string> = {
+      EXACT: 'Cantidad exacta',
+      GOOD: candidate.package.approximate ? 'Cálculo aproximado' : 'Formato compatible',
+      OVERBUY: 'Compra con excedente',
+      UNKNOWN: 'Cantidad no calculable',
+      INCOMPATIBLE: 'Unidad incompatible',
+    };
+    return labels[candidate.package.fit];
+  }
+
+  protected packageAmountLabel(
+    amount: number | null,
+    unit: PackageCalculation['unit'],
+  ): string | null {
+    if (amount === null || unit === null) return null;
+    if (unit === 'G' || unit === 'ML') {
+      const largeUnit = unit === 'G' ? 'kg' : 'l';
+      const smallUnit = unit === 'G' ? 'g' : 'ml';
+      const value = amount >= 1000 ? amount / 1000 : amount;
+      return `${new Intl.NumberFormat('es-ES', { maximumFractionDigits: 3 }).format(value)} ${
+        amount >= 1000 ? largeUnit : smallUnit
+      }`;
+    }
+    return `${amount} ${unit === 'COUNT' ? (amount === 1 ? 'unidad' : 'unidades') : amount === 1 ? 'pack' : 'packs'}`;
+  }
+
+  protected estimatedSavingCents(regular: number | null, discounted: number | null): number | null {
+    if (regular === null || discounted === null || regular <= discounted) return null;
+    return regular - discounted;
   }
 
   protected savingCents(normalPriceCents: number | null, offerPriceCents: number): number | null {
