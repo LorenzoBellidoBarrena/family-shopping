@@ -222,6 +222,11 @@
             comerciales reales.
           </p>
         }
+        @if (offersState.error()) {
+          <div class="error-banner" role="alert">
+            <span>{{ offersState.error() }}</span>
+          </div>
+        }
         <div class="offer-filters" aria-label="Filtrar ofertas por supermercado">
           @for (filter of offerFilters; track filter.id) {
             <button
@@ -299,6 +304,9 @@
                   @for (candidate of match.candidates; track candidate.externalProductId) {
                     @if (candidateOffer(candidate); as offer) {
                       <div class="match-candidate">
+                        <span class="relationship-badge relationship-badge--match">
+                          ✓ Coincidencia
+                        </span>
                         <div>
                           <strong>{{ candidate.productName }}</strong>
                           <span>
@@ -417,6 +425,106 @@
                         </button>
                       </div>
                     }
+                  }
+                  @if (!hasActiveIdentityOffer(match) && match.alternatives.length > 0) {
+                    <p class="no-exact-offer">No hay una oferta exacta ahora mismo.</p>
+                  }
+                  @if (match.alternatives.length > 0) {
+                    <div class="alternative-section">
+                      <h4>También podría servirte</h4>
+                      @for (
+                        alternative of match.alternatives;
+                        track alternative.externalProductId
+                      ) {
+                        @if (candidateOffer(alternative); as offer) {
+                          <div
+                            class="alternative-candidate"
+                            [attr.aria-label]="
+                              alternative.productName +
+                              ', producto parecido a ' +
+                              match.shoppingItemName +
+                              ', oferta ' +
+                              formatPrice(offer.offerPriceCents)
+                            "
+                          >
+                            <span class="relationship-badge relationship-badge--alternative">
+                              ≈ Producto parecido
+                            </span>
+                            <div class="alternative-copy">
+                              <strong>{{ alternative.productName }}</strong>
+                              <span>
+                                {{ alternative.brand || 'Lidl' }} ·
+                                {{ alternative.packageLabel || 'Formato no publicado' }}
+                              </span>
+                            </div>
+                            <div class="alternative-price">
+                              @if (alternative.pricing.effectiveCostCents !== null) {
+                                <strong>
+                                  Tu precio:
+                                  {{ formatPrice(alternative.pricing.effectiveCostCents) }}
+                                </strong>
+                              } @else {
+                                <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
+                              }
+                              @if (offer.normalPriceCents !== null) {
+                                <span>Antes: {{ formatPrice(offer.normalPriceCents) }}</span>
+                              }
+                              @if (alternative.package.costs.lidlPlusCostCents !== null) {
+                                <span class="loyalty-note">
+                                  Lidl Plus:
+                                  {{ formatPrice(alternative.package.costs.lidlPlusCostCents) }}
+                                </span>
+                              }
+                            </div>
+                            @if (packageNeedLabel(alternative); as needed) {
+                              <p class="alternative-package">{{ needed }}</p>
+                            }
+                            <div class="alternative-actions">
+                              <button
+                                class="secondary-button"
+                                type="button"
+                                [disabled]="
+                                  offersState.alternativeSaving(
+                                    match.shoppingItemId,
+                                    alternative.externalProductId
+                                  )
+                                "
+                                (click)="
+                                  offersState.acceptAlternative(
+                                    match.shoppingItemId,
+                                    alternative.externalProductId
+                                  )
+                                "
+                              >
+                                {{
+                                  alternative.learned
+                                    ? '✓ Lo tendremos en cuenta'
+                                    : 'También me sirve'
+                                }}
+                              </button>
+                              <button
+                                class="text-button"
+                                type="button"
+                                [disabled]="
+                                  offersState.alternativeSaving(
+                                    match.shoppingItemId,
+                                    alternative.externalProductId
+                                  )
+                                "
+                                (click)="
+                                  offersState.dismissAlternative(
+                                    match.shoppingItemId,
+                                    alternative.externalProductId
+                                  )
+                                "
+                              >
+                                No me interesa
+                              </button>
+                            </div>
+                          </div>
+                        }
+                      }
+                    </div>
                   }
                 </article>
               }

@@ -4,6 +4,7 @@ import type { PackageCalculation } from './package';
 import type { OfferType } from './supermarket-import';
 import type { Unit } from './types';
 import type { EffectivePriceCalculation } from './loyalty';
+import type { AlternativeReason, ProductConcept } from '../services/alternative-matching';
 
 export const OFFER_SUPERMARKETS = ['lidl', 'mercadona', 'carrefour', 'dia'] as const;
 
@@ -75,6 +76,15 @@ export interface ListMatchCandidate {
   activeOffers: CatalogOffer[];
 }
 
+export interface ListAlternativeCandidate extends ListMatchCandidate {
+  relationship: 'ALTERNATIVE';
+  alternativeStrength: 'STRONG_ALTERNATIVE';
+  sourceConcept: ProductConcept;
+  targetConcept: ProductConcept;
+  alternativeReasons: AlternativeReason[];
+  learned: boolean;
+}
+
 export interface ShoppingItemOfferMatch {
   shoppingItemId: string;
   shoppingItemName: string;
@@ -86,6 +96,7 @@ export interface ShoppingItemOfferMatch {
   dismissed: boolean;
   automaticMatchExternalProductId: string | null;
   candidates: ListMatchCandidate[];
+  alternatives: ListAlternativeCandidate[];
 }
 
 export interface ListOfferMatchesResponse {

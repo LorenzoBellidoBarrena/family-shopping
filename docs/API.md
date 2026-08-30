@@ -50,6 +50,7 @@ inicializado devuelve `409`, incluso aunque la clave sea correcta.
 | `PUT`    | `/api/settings/loyalty-programs/:code` | Actualiza una preferencia loyalty del hogar.                |
 | `PUT`    | `/api/items/:id/product-match`         | Confirma el producto Lidl preferido para ese nombre.        |
 | `DELETE` | `/api/items/:id/product-match`         | Quita la relación automática aprendida; devuelve `204`.     |
+| `PUT`    | `/api/items/:id/product-alternative`   | Acepta o descarta una alternativa Lidl para ese nombre.     |
 | `GET`    | `/api/product-preferences/suggestions` | Preferencias por frecuencia y prefijo normalizado.          |
 
 `GET /api/offers?supermarket=lidl|mercadona|carrefour|dia` acepta un filtro opcional. Una caída

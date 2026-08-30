@@ -189,6 +189,25 @@ export interface ListMatchCandidate {
   activeOffers: CatalogOffer[];
 }
 
+export type ProductConcept =
+  | 'NUGGETS'
+  | 'CHICKEN_FINGERS'
+  | 'BREADED_CHICKEN_STRIPS'
+  | 'BURGER'
+  | 'BURGER_MEAT'
+  | 'MINI_BURGER'
+  | 'FROZEN_FRIES'
+  | 'POTATO_WEDGES';
+
+export interface ListAlternativeCandidate extends ListMatchCandidate {
+  relationship: 'ALTERNATIVE';
+  alternativeStrength: 'STRONG_ALTERNATIVE';
+  sourceConcept: ProductConcept;
+  targetConcept: ProductConcept;
+  alternativeReasons: ('HOUSEHOLD_ACCEPTED' | 'EXPLICIT_RELATION')[];
+  learned: boolean;
+}
+
 export interface ShoppingItemOfferMatch {
   shoppingItemId: string;
   shoppingItemName: string;
@@ -200,6 +219,7 @@ export interface ShoppingItemOfferMatch {
   dismissed: boolean;
   automaticMatchExternalProductId: string | null;
   candidates: ListMatchCandidate[];
+  alternatives: ListAlternativeCandidate[];
 }
 
 export interface ListOfferMatchesResponse {

@@ -141,6 +141,22 @@ export class ShoppingApiService {
     );
   }
 
+  saveProductAlternative(
+    itemId: string,
+    externalProductId: string,
+    status: 'ACCEPTED' | 'DISMISSED',
+  ): Promise<void> {
+    return this.request(
+      firstValueFrom(
+        this.http.put<void>(
+          `/api/items/${itemId}/product-alternative`,
+          { externalProductId, status },
+          this.auth(),
+        ),
+      ),
+    );
+  }
+
   addItem(input: ItemInput): Promise<ShoppingItem> {
     return this.request(
       firstValueFrom(this.http.post<{ item: ShoppingItem }>('/api/items', input, this.auth())).then(

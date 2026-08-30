@@ -31,6 +31,7 @@ export class OffersStore {
   private readonly lastUpdatedState = signal<string | null>(null);
   private readonly categoriesState = signal<OfferBrowseCategorySummary[]>([]);
   private readonly errorState = signal<string | null>(null);
+  private readonly savingAlternativeKeys = signal<ReadonlySet<string>>(new Set());
   private readonly activeState = signal(false);
   private readonly catalogCache = new Map<string, CachedCatalog>();
   private matchingCache: { key: string; result: ListOfferMatchesResponse } | null = null;
@@ -46,6 +47,7 @@ export class OffersStore {
   readonly lastUpdatedAt = this.lastUpdatedState.asReadonly();
   readonly categories = this.categoriesState.asReadonly();
   readonly error = this.errorState.asReadonly();
+  readonly savingAlternatives = this.savingAlternativeKeys.asReadonly();
   readonly offline = this.shopping.offline;
   readonly activeOffers = computed(() => this.currentOffers().filter((offer) => !offer.upcoming));
   readonly upcomingOffers = computed(() => this.currentOffers().filter((offer) => offer.upcoming));
@@ -153,6 +155,18 @@ export class OffersStore {
     }
   }
 
+  async acceptAlternative(itemId: string, externalProductId: string): Promise<void> {
+    await this.saveAlternative(itemId, externalProductId, 'ACCEPTED');
+  }
+
+  async dismissAlternative(itemId: string, externalProductId: string): Promise<void> {
+    await this.saveAlternative(itemId, externalProductId, 'DISMISSED');
+  }
+
+  alternativeSaving(itemId: string, externalProductId: string): boolean {
+    return this.savingAlternativeKeys().has(`${itemId}:${externalProductId}`);
+  }
+
   invalidatePricing(): void {
     this.catalogCache.clear();
     this.matchingCache = null;
@@ -169,5 +183,59 @@ export class OffersStore {
   private applyMatching(result: ListOfferMatchesResponse): void {
     this.currentMatches.set(result.matchedItems);
     this.unmatchedCount.set(result.unmatchedItems.length);
+  }
+
+  private async saveAlternative(
+    itemId: string,
+    externalProductId: string,
+    status: 'ACCEPTED' | 'DISMISSED',
+  ): Promise<void> {
+    if (!this.activeState() || this.offline()) return;
+    const key = `${itemId}:${externalProductId}`;
+    if (this.savingAlternativeKeys().has(key)) return;
+    const previous = this.currentMatches();
+    const optimistic = previous.map((match) => {
+      if (match.shoppingItemId !== itemId) return match;
+      return {
+        ...match,
+        alternatives:
+          status === 'DISMISSED'
+            ? match.alternatives.filter(
+                (candidate) => candidate.externalProductId !== externalProductId,
+              )
+            : match.alternatives.map((candidate) =>
+                candidate.externalProductId === externalProductId
+                  ? { ...candidate, learned: true }
+                  : candidate,
+              ),
+      };
+    });
+    this.currentMatches.set(optimistic);
+    this.updateMatchingCache(optimistic);
+    this.savingAlternativeKeys.update((current) => new Set(current).add(key));
+    this.errorState.set(null);
+    try {
+      await this.api.saveProductAlternative(itemId, externalProductId, status);
+    } catch (error) {
+      this.currentMatches.set(previous);
+      this.updateMatchingCache(previous);
+      this.errorState.set(
+        error instanceof Error ? error.message : 'No se pudo guardar la alternativa.',
+      );
+    } finally {
+      this.savingAlternativeKeys.update((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
+  private updateMatchingCache(matches: ShoppingItemOfferMatch[]): void {
+    if (!this.matchingCache) return;
+    this.matchingCache = {
+      ...this.matchingCache,
+      result: { ...this.matchingCache.result, matchedItems: matches },
+    };
   }
 }

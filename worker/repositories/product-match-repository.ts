@@ -1,4 +1,5 @@
 import type { ProductCategory } from '../../src/shared/product-category';
+import type { ProductConcept } from '../services/alternative-matching';
 
 export interface CatalogProductForMatching {
   externalProductId: string;
@@ -19,6 +20,14 @@ export interface HouseholdProductMatchPreference {
   normalizedAlias: string;
   externalProductId: string | null;
   status: 'CONFIRMED' | 'DISMISSED';
+}
+
+export interface HouseholdAlternativePreference {
+  normalizedName: string;
+  sourceConcept: ProductConcept;
+  targetConcept: ProductConcept;
+  preferredExternalProductId: string | null;
+  status: 'ACCEPTED' | 'DISMISSED';
 }
 
 interface ProductRow {
@@ -134,6 +143,33 @@ export class ProductMatchRepository {
     }));
   }
 
+  async listHouseholdAlternativePreferences(
+    householdId: string,
+  ): Promise<HouseholdAlternativePreference[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT normalized_name, source_concept, target_concept,
+                preferred_external_product_id, status
+         FROM household_product_alternatives
+         WHERE household_id = ? AND supermarket_id = 'lidl'`,
+      )
+      .bind(householdId)
+      .all<{
+        normalized_name: string;
+        source_concept: ProductConcept;
+        target_concept: ProductConcept;
+        preferred_external_product_id: string | null;
+        status: 'ACCEPTED' | 'DISMISSED';
+      }>();
+    return results.map((row) => ({
+      normalizedName: row.normalized_name,
+      sourceConcept: row.source_concept,
+      targetConcept: row.target_concept,
+      preferredExternalProductId: row.preferred_external_product_id,
+      status: row.status,
+    }));
+  }
+
   async confirm(
     householdId: string,
     normalizedAlias: string,
@@ -179,6 +215,42 @@ export class ProductMatchRepository {
            updated_at = excluded.updated_at`,
       )
       .bind(crypto.randomUUID(), normalizedAlias, normalizedAlias, now, householdId, now)
+      .run();
+  }
+
+  async saveAlternative(
+    householdId: string,
+    normalizedName: string,
+    sourceConcept: ProductConcept,
+    targetConcept: ProductConcept,
+    externalProductId: string,
+    status: 'ACCEPTED' | 'DISMISSED',
+    now: string,
+  ): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO household_product_alternatives
+           (id, household_id, normalized_name, supermarket_id, source_concept, target_concept,
+            preferred_external_product_id, status, created_at, updated_at)
+         VALUES (?, ?, ?, 'lidl', ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (household_id, normalized_name, supermarket_id, target_concept)
+         DO UPDATE SET
+           source_concept = excluded.source_concept,
+           preferred_external_product_id = excluded.preferred_external_product_id,
+           status = excluded.status,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        householdId,
+        normalizedName,
+        sourceConcept,
+        targetConcept,
+        externalProductId,
+        status,
+        now,
+        now,
+      )
       .run();
   }
 }

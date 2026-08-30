@@ -96,6 +96,24 @@ filas general y Lidl Plus de un mismo producto. A continuación muestra candidat
 revisión, luego el resto de ofertas Lidl y finalmente las próximas. Una selección manual aprende
 para ciclos futuros; quitarla no modifica nunca el shopping item.
 
+### Alternativas semánticas de ofertas
+
+`IdentityMatcher` y `AlternativeMatcher` son capas independientes. El primero conserva sus
+thresholds `HIGH/MEDIUM/LOW` y responde «es el producto apuntado». El segundo responde únicamente
+«podría sustituirlo» mediante `ProductConcept` y relaciones direccionales explícitas; nunca eleva
+una alternativa a match ni usa `ProductCategory` como identidad.
+
+Ambas capas comparten la misma lectura masiva del catálogo, ofertas y preferencias dentro de
+`GET /api/offers/for-list`. El matcher alternativo sólo considera ofertas vigentes ya persistidas en
+D1, excluye los candidatos verdes y limita el resultado a tres por item antes de serializar. No
+consulta Lidl, no hace N+1 y no participa en ninguna ruta CRUD.
+
+`household_product_alternatives` conserva por hogar, nombre normalizado y concepto destino si una
+familia aceptó o descartó una sustitución. La preferencia apunta opcionalmente al último SKU, pero
+la prioridad principal es el concepto, por lo que puede sobrevivir a una campaña o SKU nuevo.
+Angular aplica aceptación/descarte de forma optimista dentro de `OffersStore`, actualiza su caché y
+hace rollback si falla la persistencia; `ShoppingStore` y el shopping item permanecen intactos.
+
 ## Cantidades y formatos Lidl
 
 La identidad y el ajuste de envase son capas independientes. Después de filtrar candidatos, un

@@ -25,6 +25,11 @@ const productMatch = (pathname: string): { itemId: string } | null => {
   return match ? { itemId: decodeURIComponent(match[1]) } : null;
 };
 
+const productAlternative = (pathname: string): { itemId: string } | null => {
+  const match = /^\/api\/items\/([^/]+)\/product-alternative$/u.exec(pathname);
+  return match ? { itemId: decodeURIComponent(match[1]) } : null;
+};
+
 const loyaltyProgramMatch = (pathname: string): { program: string } | null => {
   const match = /^\/api\/settings\/loyalty-programs\/([^/]+)$/u.exec(pathname);
   return match ? { program: decodeURIComponent(match[1]) } : null;
@@ -73,10 +78,12 @@ export const routeApi = async (
 
   const matchedItem = itemMatch(url.pathname);
   const matchedProductPreference = productMatch(url.pathname);
+  const matchedProductAlternative = productAlternative(url.pathname);
   const matchedLoyaltyProgram = loyaltyProgramMatch(url.pathname);
   const knownPrivatePath =
     matchedItem !== null ||
     matchedProductPreference !== null ||
+    matchedProductAlternative !== null ||
     matchedLoyaltyProgram !== null ||
     url.pathname === '/api/pairings' ||
     url.pathname === '/api/shopping-cycle/active' ||
@@ -161,6 +168,33 @@ export const routeApi = async (
       return new Response(null, { status: 204 });
     }
     return methodNotAllowed(['PUT', 'DELETE']);
+  }
+
+  if (matchedProductAlternative) {
+    if (request.method !== 'PUT') return methodNotAllowed(['PUT']);
+    const body = await readJsonObject(request);
+    const externalProductId = body['externalProductId'];
+    const status = body['status'];
+    if (
+      typeof externalProductId !== 'string' ||
+      externalProductId.length < 1 ||
+      externalProductId.length > 100
+    ) {
+      throw badRequest(
+        'INVALID_EXTERNAL_PRODUCT',
+        'externalProductId debe identificar un producto publicado.',
+      );
+    }
+    if (status !== 'ACCEPTED' && status !== 'DISMISSED') {
+      throw badRequest('INVALID_ALTERNATIVE_STATUS', 'status debe ser ACCEPTED o DISMISSED.');
+    }
+    await listMatching.saveAlternative(
+      device,
+      matchedProductAlternative.itemId,
+      externalProductId,
+      status,
+    );
+    return jsonResponse({ saved: true });
   }
 
   if (matchedItem) {

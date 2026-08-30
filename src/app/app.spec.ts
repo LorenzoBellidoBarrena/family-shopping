@@ -11,6 +11,7 @@ import type {
   HouseholdLoyaltyProgram,
   LoyaltyStatus,
   ListOfferMatchesResponse,
+  ListAlternativeCandidate,
   OfferSupermarketId,
   OfferBrowseCategory,
   OffersResponse,
@@ -71,6 +72,7 @@ class FakeTokenStore {
 class FakeShoppingApi {
   offersMode: 'DEMO' | 'REAL' = 'DEMO';
   lidlPlusStatus: LoyaltyStatus = 'UNKNOWN';
+  showAlternatives = false;
   serverCycle = cycle([item('milk', 'Leche', 1000), item('bread', 'Pan', 2000, true)]);
   readonly supermarkets: Supermarket[] = [
     { id: 'lidl', code: 'LIDL', name: 'Lidl' },
@@ -218,6 +220,7 @@ class FakeShoppingApi {
             activeOffers: this.offerData,
           },
         ],
+        alternatives: this.showAlternatives ? [this.alternativeCandidate()] : [],
       },
     ],
     unmatchedItems: [],
@@ -234,6 +237,7 @@ class FakeShoppingApi {
   );
   readonly confirmProductMatch = vi.fn(async () => undefined);
   readonly dismissProductMatch = vi.fn(async () => undefined);
+  readonly saveProductAlternative = vi.fn(async () => undefined);
   readonly bootstrap = vi.fn(async (input: BootstrapInput): Promise<BootstrapResponse> => {
     void input;
     return {
@@ -320,6 +324,82 @@ class FakeShoppingApi {
     this.serverCycle = { ...cycle(carried), id: 'cycle-2' };
     return this.serverCycle;
   });
+
+  private alternativeCandidate(): ListAlternativeCandidate {
+    const offer: CatalogOffer = {
+      ...this.offerData[0],
+      id: 'lidl-fingers',
+      externalProductId: 'product-lidl-fingers',
+      productName: 'Fingers de pollo',
+      normalizedProductName: 'fingers de pollo',
+      packageLabel: '400 g',
+      normalPriceCents: 349,
+      offerPriceCents: 279,
+      unitPriceCents: 698,
+      relatedToList: true,
+      matchedItemNames: ['Nuggets'],
+      pricing: {
+        effectiveCostCents: 279,
+        effectivePriceReason: 'GENERAL_OFFER',
+        potentialLoyaltyCostCents: null,
+        generalSavingCents: 70,
+        additionalLoyaltySavingCents: null,
+        totalSavingCents: 70,
+      },
+    };
+    return {
+      externalProductId: offer.externalProductId,
+      productName: offer.productName,
+      normalizedProductName: offer.normalizedProductName,
+      brand: 'SINTÉTICO',
+      commercialCategory: 'Congelados/Pollo empanado',
+      visualCategory: 'MEAT',
+      packageLabel: '400 g',
+      package: {
+        descriptor: {
+          description: '400 g',
+          type: 'MEASURED',
+          packCount: 1,
+          amountPerPack: 400,
+          unit: 'G',
+          totalAmount: 400,
+          approximate: false,
+        },
+        fit: 'OVERBUY',
+        packsNeeded: 3,
+        requestedAmount: 1000,
+        purchasedAmount: 1200,
+        excessAmount: 200,
+        unit: 'G',
+        approximate: false,
+        costs: {
+          regularCostCents: 1047,
+          generalOfferCostCents: 837,
+          lidlPlusCostCents: null,
+        },
+      },
+      pricing: {
+        effectiveCostCents: 837,
+        effectivePriceReason: 'GENERAL_OFFER',
+        potentialLoyaltyCostCents: null,
+        generalSavingCents: 210,
+        additionalLoyaltySavingCents: null,
+        totalSavingCents: 210,
+      },
+      currentPriceCents: 349,
+      score: 80,
+      confidence: 'MEDIUM',
+      reasons: ['EXPLICIT_RELATION'],
+      preferred: false,
+      activeOffers: [offer],
+      relationship: 'ALTERNATIVE',
+      alternativeStrength: 'STRONG_ALTERNATIVE',
+      sourceConcept: 'NUGGETS',
+      targetConcept: 'CHICKEN_FINGERS',
+      alternativeReasons: ['EXPLICIT_RELATION'],
+      learned: false,
+    };
+  }
 
   private matchPricing() {
     const plus = this.offerData[0].lidlPlusPriceCents;
@@ -569,6 +649,64 @@ describe('Shopping list interface', () => {
     expect(api.getOffers.mock.calls.at(-1)?.slice(0, 2)).toEqual(['dia', undefined]);
     expect(fixture.nativeElement.querySelectorAll('.offer-card')).toHaveLength(0);
     expect(fixture.nativeElement.querySelectorAll('.match-card')).toHaveLength(0);
+  });
+
+  it('shows matches in green and alternatives in orange with optimistic household feedback', async () => {
+    api.showAlternatives = true;
+    button('％ Ofertas').click();
+    await settle();
+
+    const card = fixture.nativeElement.querySelector('.match-card') as HTMLElement;
+    expect(card.querySelector('.relationship-badge--match')?.textContent).toContain('Coincidencia');
+    expect(card.querySelector('.relationship-badge--alternative')?.textContent).toContain(
+      'Producto parecido',
+    );
+    expect(card.textContent).toContain('Fingers de pollo');
+    expect(card.textContent).toContain('Necesitarías 3 envases');
+
+    button('También me sirve').click();
+    await settle();
+    expect(api.saveProductAlternative).toHaveBeenCalledWith(
+      'milk',
+      'product-lidl-fingers',
+      'ACCEPTED',
+    );
+    expect(button('✓ Lo tendremos en cuenta')).toBeDefined();
+    expect(api.serverCycle.items[0].name).toBe('Leche');
+
+    button('No me interesa').click();
+    await settle();
+    expect(api.saveProductAlternative).toHaveBeenLastCalledWith(
+      'milk',
+      'product-lidl-fingers',
+      'DISMISSED',
+    );
+    expect(card.textContent).not.toContain('Fingers de pollo');
+  });
+
+  it('rolls back a dismissed alternative when persistence fails', async () => {
+    api.showAlternatives = true;
+    api.saveProductAlternative.mockRejectedValueOnce(new Error('No se pudo guardar'));
+    button('％ Ofertas').click();
+    await settle();
+
+    button('No me interesa').click();
+    await settle();
+
+    expect(fixture.nativeElement.textContent).toContain('Fingers de pollo');
+    expect(fixture.nativeElement.textContent).toContain('No se pudo guardar');
+  });
+
+  it('reuses the offer and alternative matching cache when the list did not change', async () => {
+    button('％ Ofertas').click();
+    await settle();
+    button('☷ Lista').click();
+    fixture.detectChanges();
+    button('％ Ofertas').click();
+    await settle();
+
+    expect(api.getOffers).toHaveBeenCalledTimes(1);
+    expect(api.getListOfferMatches).toHaveBeenCalledTimes(1);
   });
 
   it('cancels offer requests when returning to the list', async () => {

@@ -105,6 +105,7 @@ beforeEach(async () => {
   await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
   await testEnv.DB.batch([
     testEnv.DB.prepare(`DELETE FROM household_loyalty_programs`),
+    testEnv.DB.prepare(`DELETE FROM household_product_alternatives`),
     testEnv.DB.prepare(`DELETE FROM product_aliases`),
     testEnv.DB.prepare(`DELETE FROM offers`),
     testEnv.DB.prepare(`DELETE FROM product_prices`),
@@ -841,6 +842,83 @@ describe('supermarket offers module', () => {
       householdId: household.id,
       items: [{ id: milk.id, name: 'Leche' }],
     });
+  });
+
+  it('accepts a semantic alternative separately and keeps the shopping item unchanged', async () => {
+    const { token } = await bootstrap();
+    const nuggets = await addItem(token, 'Nuggets', { supermarketId: 'lidl' });
+    await testEnv.DB.batch([
+      testEnv.DB.prepare(
+        `INSERT INTO stores
+           (id, supermarket_id, external_id, name, address, city, postal_code, active)
+         VALUES ('lidl-region', 'lidl', 'region-badajoz', 'Ámbito Badajoz',
+                 'Ámbito regional', 'Badajoz', '06000', 1)`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO import_runs
+           (id, provider, started_at, finished_at, status, products_seen, prices_seen, offers_seen)
+         VALUES ('run-lidl', 'lidl', '2026-08-30T05:00:00.000Z',
+                 '2026-08-30T05:00:10.000Z', 'SUCCESS', 1, 1, 1)`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO external_products
+           (id, supermarket_id, external_id, name, normalized_name, brand, category,
+            visual_category, package_quantity, package_unit, last_seen_at)
+         VALUES ('fingers', 'lidl', 'fingers', 'Fingers de pollo', 'fingers de pollo',
+                 'SINTÉTICO', 'Congelados/Pollo empanado', 'MEAT', 400, 'g',
+                 '2026-08-30T05:00:05.000Z')`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO store_products (store_id, product_id, catalog_status, observed_at)
+         VALUES ('lidl-region', 'fingers', 'PUBLISHED', '2026-08-30T05:00:05.000Z')`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO product_prices
+           (id, product_id, store_id, price_cents, observed_at, channel, geographic_scope)
+         VALUES ('price-fingers', 'fingers', 'lidl-region', 349,
+                 '2026-08-30T05:00:05.000Z', 'STORE', 'REGIONAL')`,
+      ),
+      testEnv.DB.prepare(
+        `INSERT INTO offers
+           (id, product_id, store_id, normal_price_cents, offer_price_cents, promotion_type,
+            valid_from, valid_until, source_url, requires_loyalty_card, observed_at,
+            offer_type, channel, geographic_scope)
+         VALUES ('offer-fingers', 'fingers', 'lidl-region', 349, 279, 'Fixture sintético',
+                 '2026-08-01', '2099-08-30', 'https://www.lidl.es/', 0,
+                 '2026-08-30T05:00:05.000Z', 'DIRECT_DISCOUNT', 'STORE', 'REGIONAL')`,
+      ),
+    ]);
+
+    const before = await api('/api/offers/for-list', { token });
+    const beforeBody = await readJson<{
+      matchedItems: {
+        candidates: unknown[];
+        alternatives: { externalProductId: string; learned: boolean }[];
+      }[];
+    }>(before);
+    expect(beforeBody.matchedItems[0]).toMatchObject({
+      candidates: [],
+      alternatives: [{ externalProductId: 'fingers', learned: false }],
+    });
+
+    const accepted = await api(`/api/items/${nuggets.id}/product-alternative`, {
+      method: 'PUT',
+      token,
+      body: { externalProductId: 'fingers', status: 'ACCEPTED' },
+    });
+    const learned = await readJson<{
+      matchedItems: { alternatives: { learned: boolean; relationship: string }[] }[];
+    }>(await api('/api/offers/for-list', { token }));
+    const canonical = await readJson<CycleResponse>(
+      await api('/api/shopping-cycle/active', { token }),
+    );
+
+    expect(accepted.status).toBe(200);
+    expect(learned.matchedItems[0].alternatives[0]).toMatchObject({
+      learned: true,
+      relationship: 'ALTERNATIVE',
+    });
+    expect(canonical.cycle.items[0]).toMatchObject({ id: nuggets.id, name: 'Nuggets' });
   });
 });
 

@@ -8,6 +8,7 @@ import type {
   OfferSupermarketId,
   OfferBrowseCategory,
   ListMatchCandidate,
+  ShoppingItemOfferMatch,
   PackageCalculation,
   EffectivePriceReason,
   PairingDetails,
@@ -82,14 +83,18 @@ export class App implements OnInit {
     this.offersState.offerMatches().filter((match) => !match.checked),
   );
   protected readonly relatedOfferMatches = computed(() =>
-    this.pendingOfferMatches().filter((match) =>
-      match.candidates.some((candidate) => candidate.activeOffers.length > 0),
+    this.pendingOfferMatches().filter(
+      (match) =>
+        match.candidates.some((candidate) => candidate.activeOffers.length > 0) ||
+        match.alternatives.length > 0,
     ),
   );
   private readonly allOtherActiveOffers = computed(() => {
     const relatedOfferIds = new Set(
       this.relatedOfferMatches().flatMap((match) =>
-        match.candidates.flatMap((candidate) => candidate.activeOffers.map((offer) => offer.id)),
+        [...match.candidates, ...match.alternatives].flatMap((candidate) =>
+          candidate.activeOffers.map((offer) => offer.id),
+        ),
       ),
     );
     return this.activeOffers().filter((offer) => !relatedOfferIds.has(offer.id));
@@ -343,6 +348,10 @@ export class App implements OnInit {
 
   protected candidateOffer(candidate: ListMatchCandidate) {
     return candidate.activeOffers[0] ?? null;
+  }
+
+  protected hasActiveIdentityOffer(match: ShoppingItemOfferMatch): boolean {
+    return match.candidates.some((candidate) => candidate.activeOffers.length > 0);
   }
 
   protected packageNeedLabel(candidate: ListMatchCandidate): string | null {

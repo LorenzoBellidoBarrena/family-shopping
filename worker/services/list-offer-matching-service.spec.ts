@@ -25,7 +25,12 @@ const device = (householdId: string): Device => ({
 
 const createHousehold = async (
   householdId: string,
-  item: { name: string; normalizedName: string; supermarketId?: string | null },
+  item: {
+    name: string;
+    normalizedName: string;
+    supermarketId?: string | null;
+    category?: string;
+  },
 ): Promise<void> => {
   const cycleId = `cycle-${householdId}`;
   await testEnv.DB.batch([
@@ -40,13 +45,14 @@ const createHousehold = async (
       `INSERT INTO shopping_items
          (id, shopping_cycle_id, name, normalized_name, quantity_milli, unit,
           supermarket_id, category, checked, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1000, 'unidad', ?, 'DAIRY', 0, 1000, ?, ?)`,
+       VALUES (?, ?, ?, ?, 1000, 'unidad', ?, ?, 0, 1000, ?, ?)`,
     ).bind(
       `item-${householdId}`,
       cycleId,
       item.name,
       item.normalizedName,
       item.supermarketId ?? null,
+      item.category ?? 'DAIRY',
       '2026-08-28T00:00:00.000Z',
       '2026-08-28T00:00:00.000Z',
     ),
@@ -58,15 +64,30 @@ const createProduct = async (
   name: string,
   variantPrice: number,
   withOffer = false,
+  classification: {
+    category?: string;
+    visualCategory?: string;
+    packageQuantity?: number;
+    packageUnit?: string;
+  } = {},
 ): Promise<void> => {
   const statements: D1PreparedStatement[] = [
     testEnv.DB.prepare(
       `INSERT INTO external_products
          (id, supermarket_id, external_id, name, normalized_name, brand, category,
           visual_category, package_quantity, package_unit, last_seen_at)
-       VALUES (?, 'lidl', ?, ?, ?, 'MILBONA', 'Lácteos/Leche y nata',
-               'DAIRY', 1, 'l', '2026-08-28T05:00:05.000Z')`,
-    ).bind(id, id, name, name.toLocaleLowerCase('es')),
+       VALUES (?, 'lidl', ?, ?, ?, 'MILBONA', ?, ?, ?, ?,
+               '2026-08-28T05:00:05.000Z')`,
+    ).bind(
+      id,
+      id,
+      name,
+      name.toLocaleLowerCase('es'),
+      classification.category ?? 'Lácteos/Leche y nata',
+      classification.visualCategory ?? 'DAIRY',
+      classification.packageQuantity ?? 1,
+      classification.packageUnit ?? 'l',
+    ),
     testEnv.DB.prepare(
       `INSERT INTO store_products (store_id, product_id, catalog_status, observed_at)
        VALUES ('lidl-region', ?, 'PUBLISHED', '2026-08-28T05:00:05.000Z')`,
@@ -113,6 +134,7 @@ const service = (): ListOfferMatchingService =>
 beforeEach(async () => {
   await applyD1Migrations(testEnv.DB, testEnv.TEST_MIGRATIONS);
   await testEnv.DB.batch([
+    testEnv.DB.prepare(`DELETE FROM household_product_alternatives`),
     testEnv.DB.prepare(`DELETE FROM product_aliases`),
     testEnv.DB.prepare(`DELETE FROM offers`),
     testEnv.DB.prepare(`DELETE FROM product_prices`),
@@ -399,5 +421,128 @@ describe('ListOfferMatchingService', () => {
 
     const result = await service().list(device('house-a'));
     expect(result).toMatchObject({ matchedItems: [], unmatchedItems: [] });
+  });
+
+  it('returns a green identity match and separate active orange alternatives', async () => {
+    await createHousehold('house-a', {
+      name: 'Nuggets',
+      normalizedName: 'nuggets',
+      category: 'MEAT',
+    });
+    const meat = { category: 'Congelados/Pollo empanado', visualCategory: 'MEAT' };
+    await createProduct('nuggets', 'Nuggets de pollo', 299, true, meat);
+    await createProduct('fingers', 'Fingers de pollo', 349, true, meat);
+    await createProduct('strips', 'Tiras de pollo empanadas', 399, true, meat);
+    await createProduct('croquettes', 'Croquetas de pollo', 279, true, meat);
+
+    const result = await service().list(device('house-a'));
+
+    expect(
+      result.matchedItems[0].candidates.map((candidate) => candidate.externalProductId),
+    ).toEqual(['nuggets']);
+    expect(result.matchedItems[0].alternatives).toEqual([
+      expect.objectContaining({
+        externalProductId: 'fingers',
+        relationship: 'ALTERNATIVE',
+        targetConcept: 'CHICKEN_FINGERS',
+      }),
+      expect.objectContaining({
+        externalProductId: 'strips',
+        relationship: 'ALTERNATIVE',
+        targetConcept: 'BREADED_CHICKEN_STRIPS',
+      }),
+    ]);
+  });
+
+  it('returns only an alternative when there is no identity offer and excludes products without offers', async () => {
+    await createHousehold('house-a', {
+      name: 'Nuggets',
+      normalizedName: 'nuggets',
+      category: 'MEAT',
+    });
+    const meat = { category: 'Congelados/Pollo empanado', visualCategory: 'MEAT' };
+    await createProduct('fingers', 'Fingers de pollo', 349, true, meat);
+    await createProduct('strips', 'Tiras de pollo empanadas', 399, false, meat);
+
+    const result = await service().list(device('house-a'));
+
+    expect(result.matchedItems[0].candidates).toEqual([]);
+    expect(
+      result.matchedItems[0].alternatives.map((candidate) => candidate.externalProductId),
+    ).toEqual(['fingers']);
+  });
+
+  it('limits alternatives to three in the backend', async () => {
+    await createHousehold('house-a', {
+      name: 'Nuggets',
+      normalizedName: 'nuggets',
+      category: 'MEAT',
+    });
+    const meat = { category: 'Congelados/Pollo empanado', visualCategory: 'MEAT' };
+    for (const [id, name] of [
+      ['fingers-a', 'Fingers de pollo A'],
+      ['fingers-b', 'Fingers de pollo B'],
+      ['fingers-c', 'Fingers de pollo C'],
+      ['strips-a', 'Tiras de pollo empanadas A'],
+      ['strips-b', 'Tiras de pollo empanadas B'],
+    ]) {
+      await createProduct(id, name, 300, true, meat);
+    }
+
+    const result = await service().list(device('house-a'));
+    expect(result.matchedItems[0].alternatives).toHaveLength(3);
+  });
+
+  it('learns and dismisses alternatives by concept without creating an identity match', async () => {
+    await createHousehold('house-a', {
+      name: 'Nuggets',
+      normalizedName: 'nuggets',
+      category: 'MEAT',
+    });
+    const meat = { category: 'Congelados/Pollo empanado', visualCategory: 'MEAT' };
+    await createProduct('fingers', 'Fingers de pollo', 349, true, meat);
+    await createProduct('strips', 'Tiras de pollo empanadas', 399, true, meat);
+    const matching = service();
+
+    await matching.saveAlternative(device('house-a'), 'item-house-a', 'fingers', 'ACCEPTED');
+    let result = await matching.list(device('house-a'));
+    expect(result.matchedItems[0].automaticMatchExternalProductId).toBeNull();
+    expect(result.matchedItems[0].alternatives[0]).toMatchObject({
+      externalProductId: 'fingers',
+      learned: true,
+      alternativeReasons: ['HOUSEHOLD_ACCEPTED', 'EXPLICIT_RELATION'],
+    });
+
+    await matching.saveAlternative(device('house-a'), 'item-house-a', 'strips', 'DISMISSED');
+    result = await matching.list(device('house-a'));
+    expect(
+      result.matchedItems[0].alternatives.map((candidate) => candidate.externalProductId),
+    ).toEqual(['fingers']);
+  });
+
+  it('keeps alternative learning isolated by household and reusable across SKUs', async () => {
+    await createHousehold('house-a', {
+      name: 'Nuggets',
+      normalizedName: 'nuggets',
+      category: 'MEAT',
+    });
+    await createHousehold('house-b', {
+      name: 'Nuggets',
+      normalizedName: 'nuggets',
+      category: 'MEAT',
+    });
+    const meat = { category: 'Congelados/Pollo empanado', visualCategory: 'MEAT' };
+    await createProduct('fingers-a', 'Fingers de pollo A', 349, true, meat);
+    await createProduct('fingers-b', 'Fingers de pollo B', 329, true, meat);
+    const matching = service();
+    await matching.saveAlternative(device('house-a'), 'item-house-a', 'fingers-a', 'ACCEPTED');
+
+    const [houseA, houseB] = await Promise.all([
+      matching.list(device('house-a')),
+      matching.list(device('house-b')),
+    ]);
+    expect(houseA.matchedItems[0].alternatives.every((candidate) => candidate.learned)).toBe(true);
+    expect(houseA.matchedItems[0].alternatives[0].externalProductId).toBe('fingers-a');
+    expect(houseB.matchedItems[0].alternatives.every((candidate) => !candidate.learned)).toBe(true);
   });
 });
