@@ -334,6 +334,14 @@ export class App implements OnInit {
     return Boolean(url && !this.failedImageUrls().has(url));
   }
 
+  protected imageRequestUrl(url: string): string {
+    const requestUrl = new URL(url, this.initialUrl);
+    if (requestUrl.origin !== this.initialUrl.origin) {
+      requestUrl.searchParams.set('ngsw-bypass', 'true');
+    }
+    return requestUrl.toString();
+  }
+
   protected markImageFailed(url: string): void {
     if (this.failedImageUrls().has(url)) return;
     this.failedImageUrls.update((current) => new Set([...current, url]));

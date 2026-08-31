@@ -281,7 +281,7 @@
                           >
                             <img
                               class="offer-product-image"
-                              [src]="candidate.imageUrl"
+                              [src]="imageRequestUrl(candidate.imageUrl)"
                               [alt]="candidate.productName"
                               width="112"
                               height="112"
@@ -364,7 +364,7 @@
                           >
                             <img
                               class="offer-product-image"
-                              [src]="alternative.imageUrl"
+                              [src]="imageRequestUrl(alternative.imageUrl)"
                               [alt]="alternative.productName"
                               width="112"
                               height="112"
@@ -463,7 +463,7 @@
                     >
                       <img
                         class="offer-product-image"
-                        [src]="offer.imageUrl"
+                        [src]="imageRequestUrl(offer.imageUrl)"
                         [alt]="offer.productName"
                         width="112"
                         height="112"
@@ -518,7 +518,7 @@
                     >
                       <img
                         class="offer-product-image"
-                        [src]="offer.imageUrl"
+                        [src]="imageRequestUrl(offer.imageUrl)"
                         [alt]="offer.productName"
                         width="112"
                         height="112"
@@ -823,7 +823,7 @@
         ×
       </button>
       <img
-        [src]="image.url"
+        [src]="imageRequestUrl(image.url)"
         [alt]="image.name"
         decoding="async"
         (error)="markImageFailed(image.url)"

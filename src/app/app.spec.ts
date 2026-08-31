@@ -738,7 +738,7 @@ describe('Shopping list interface', () => {
     await settle();
 
     const image = fixture.nativeElement.querySelector('.offer-product-image') as HTMLImageElement;
-    expect(image.src).toBe('https://www.lidl.es/assets/leche-entera.png');
+    expect(image.src).toBe('https://www.lidl.es/assets/leche-entera.png?ngsw-bypass=true');
     expect(image.getAttribute('loading')).toBe('lazy');
     expect(image.getAttribute('decoding')).toBe('async');
     expect(image.width).toBe(112);
