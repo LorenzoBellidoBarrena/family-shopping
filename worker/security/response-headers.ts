@@ -8,7 +8,7 @@ const contentSecurityPolicy = (request: Request): string => {
     "font-src 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "img-src 'self' data:",
+    "img-src 'self' data: https://www.lidl.es https://imgproxy.leaflets.schwarz https://lidl.media.schwarz",
     "manifest-src 'self'",
     "object-src 'none'",
     "script-src 'self'",

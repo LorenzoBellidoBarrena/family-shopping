@@ -1,6 +1,48 @@
 # Progreso
 
-## Fase actual: alternativas similares de ofertas Lidl
+## Fase actual: interfaz compacta de ofertas con imágenes Lidl
+
+Estado: Ofertas presenta únicamente datos Lidl útiles para compra, con tarjetas compactas e
+imágenes oficiales del payload de campaña. La Lista, su CRUD y el funcionamiento offline no cargan
+ni consultan imágenes de catálogo.
+
+### Implementado
+
+- `image_url` ya formaba parte de `external_products` desde `0003`; no se creó ni modificó ninguna
+  migración. El importador conserva la imagen encontrada en `data-grid-data` durante la misma
+  petición de campaña, sin descargar binarios ni realizar peticiones por producto.
+- Allowlist cerrada a los tres hosts Lidl/Schwarz observados, sólo HTTPS, sin credenciales y con
+  longitud máxima de 2.048 caracteres. La URL sale por los contratos de catálogo y matching desde
+  las consultas D1 existentes; no existe proxy de imágenes ni una consulta adicional.
+- La CSP de shell/API permite esos mismos tres hosts únicamente en `img-src`; conserva
+  `default-src`, scripts y estilos restringidos al propio origen.
+- Cards reducidas a imagen, nombre, marca/formato, precio general/anterior y Lidl Plus. Se retiraron
+  de la vista confidence, score, package fit, categoría interna, fuente, canal, vigencia completa y
+  los múltiples desgloses de ahorro; la API conserva esos datos.
+- Coincidencias y alternativas mantienen semántica accesible no visible y se distinguen con borde
+  verde/naranja tenue. Las acciones de aprendizaje continúan operativas y no modifican la lista.
+- Visor accesible con foco inicial en cerrar, botón X, cierre por fondo o Escape, restauración del
+  foco y bloqueo del scroll. Las miniaturas usan dimensiones fijas, `loading="lazy"`,
+  `decoding="async"` y placeholder ante ausencia/error.
+- Ofertas fuerza `Lidl` como único proveedor activo. Mercadona, Carrefour y DIA aparecen bloqueados
+  y no pueden cambiar `OffersStore` ni ejecutar API; siguen disponibles como preferencias de compra
+  en la Lista y permanecen en el dominio multi-supermercado.
+- Se simplificaron textos de carga, onboarding, ajustes, conexión, Habituales y estados vacíos. No
+  se alteraron lista, pairing, WebSocket, IndexedDB, Cron ni lógica de precios/matching.
+- Validación Chrome Android 412×915: sin overflow horizontal, cards de 380×127 CSS px, imagen real
+  y placeholder sin iconos rotos, visor 380×672 con foco/scroll correctos y tres proveedores
+  bloqueados.
+- Conteo D1 remoto no destructivo del 31 de agosto: 79 productos Lidl, 79 con `image_url` y 0 sin
+  imagen; todas las URLs persistidas usan `https://www.lidl.es`.
+- Publicado el 31 de agosto de 2026 en la versión
+  `e806e6cc-1dc4-4466-be15-e4e17c8ad64f`, bundle `main-BW35LI3T.js`. Smoke: shell y `/pair` 200,
+  health 200, API desconocida JSON 404 y Ofertas sin token 401. La CSP publicada contiene sólo los
+  hosts de imagen permitidos, `SUPERMARKET_FEATURE_ENABLED=true` y los Cron continúan exactamente
+  `0 3 * * *` y `0 4 * * *`.
+- Verificación final: 53 tests Angular + 211 Worker/D1 = 264 PASS, además de Prettier, ESLint,
+  TypeScript estricto, build PWA, `git diff --check` y dry-run de Wrangler.
+
+## Fase anterior: alternativas similares de ofertas Lidl
 
 Estado: la aplicación distingue matches verdes de identidad y alternativas naranjas de
 sustitución. El diccionario inicial es pequeño, explícito y conservador; aceptación y descarte son
@@ -15,8 +57,8 @@ por hogar y concepto, sin modificar la lista ni su ruta crítica.
   promoción, Lidl Plus y precio efectivo.
 - Migración aditiva `0011_household_product_alternatives.sql`: `ACCEPTED`/`DISMISSED` por hogar,
   nombre y concepto; SKU opcional para prioridad, no como identidad permanente.
-- UI verde «✓ Coincidencia» y naranja «≈ Producto parecido», con estado optimista, rollback,
-  semántica accesible y caso útil sin match exacto.
+- UI verde de identidad y naranja de alternativa, sin badges repetitivos visibles, con estado
+  optimista, rollback, semántica accesible y caso útil sin match exacto.
 - Caché y cancelación permanecen en `OffersStore`; CRUD y `ShoppingStore` no invocan el matcher
   alternativo. La prueba de aislamiento conserva toggles idénticos con 10 y 1.000 ofertas.
 - Revisión conservadora de 20 pares: 20/20, cero alternativas absurdas. El catálogo real local

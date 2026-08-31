@@ -12,7 +12,6 @@
       <section class="state-card" aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
         <h2>Cargando la lista…</h2>
-        <p>Un momento, por favor.</p>
       </section>
     } @else if (!store.hasToken()) {
       <section class="setup-card" aria-labelledby="setup-title">
@@ -28,14 +27,12 @@
           <div class="onboarding-options">
             <div>
               <strong>¿Es el primer móvil?</strong>
-              <p>Crea el hogar utilizando la clave familiar de configuración.</p>
               <button class="secondary-button" type="button" (click)="chooseBootstrap()">
                 Configurar hogar
               </button>
             </div>
             <div>
               <strong>¿Ya existe la lista familiar?</strong>
-              <p>Usa el código temporal generado desde un móvil autorizado.</p>
               <button class="primary-button" type="button" (click)="choosePairing()">
                 Vincular este móvil
               </button>
@@ -44,9 +41,6 @@
         } @else if (onboardingMode() === 'pair') {
           <p class="status-pill">Invitación familiar</p>
           <h2 id="setup-title">Vincular este dispositivo</h2>
-          <p class="supporting-text">
-            Estás vinculando este móvil a la lista familiar. El código se usa una sola vez.
-          </p>
           <form (ngSubmit)="consumePairing()">
             <label for="pairing-code-input">Código de vinculación</label>
             <input
@@ -88,9 +82,6 @@
             </button>
           } @else {
             <h2 id="setup-title">Configurar lista familiar</h2>
-            <p class="supporting-text">
-              La clave familiar sólo crea el hogar y se utiliza una vez, en el primer móvil.
-            </p>
             <form (ngSubmit)="submitSetup()">
               <label for="access-key">Clave familiar</label>
               <input
@@ -177,10 +168,7 @@
               }
             </p>
           }
-          <p class="supporting-text">
-            Si lo activas, usaremos los precios Lidl Plus para calcular el coste cuando estén
-            disponibles.
-          </p>
+          <p class="supporting-text">Usaremos el precio Lidl Plus cuando esté disponible.</p>
           @if (store.loyaltyError()) {
             <p class="settings-error" role="alert">{{ store.loyaltyError() }}</p>
           }
@@ -193,46 +181,27 @@
         >
           Añadir otro móvil
         </button>
-        <p class="supporting-text">Se mostrará un QR y un código temporal para el nuevo móvil.</p>
       </section>
     } @else if (view() === 'offers') {
       <section class="offers-view" aria-labelledby="offers-title">
         <div class="offers-heading">
           <div>
-            <p class="eyebrow">
-              {{ offersState.mode() === 'REAL' ? 'Datos reales · Lidl' : 'Datos de demostración' }}
-            </p>
-            <h2 id="offers-title">Ofertas</h2>
+            <h2 id="offers-title">🔥 Ofertas Lidl</h2>
+            <p>Actualizado {{ formatUpdatedAt(offersState.lastUpdatedAt()) }} · Badajoz</p>
           </div>
-          <span>{{ offersState.mode() === 'REAL' ? 'Badajoz' : 'Zafra' }}</span>
         </div>
-        @if (offersState.mode() === 'REAL') {
-          <p class="supporting-text">
-            Campañas regionales de Badajoz · Última actualización:
-            {{ formatUpdatedAt(offersState.lastUpdatedAt()) }}
-          </p>
-          @if (store.lidlPlusStatus() === 'UNKNOWN') {
-            <p class="loyalty-config-hint">
-              ¿Tienes Lidl Plus? Configúralo en Ajustes para usar ese precio automáticamente.
-            </p>
-          }
-        } @else {
-          <p class="supporting-text">
-            Esta primera versión usa fixtures para validar la experiencia. Los precios no son datos
-            comerciales reales.
-          </p>
-        }
         @if (offersState.error()) {
           <div class="error-banner" role="alert">
             <span>{{ offersState.error() }}</span>
           </div>
         }
-        <div class="offer-filters" aria-label="Filtrar ofertas por supermercado">
+        <div class="supermarket-status" aria-label="Supermercados con ofertas">
           @for (filter of offerFilters; track filter.id) {
             <button
               type="button"
               [class.offer-filter--active]="offerFilter() === filter.id"
-              [attr.aria-pressed]="offerFilter() === filter.id"
+              [attr.aria-pressed]="filter.enabled ? offerFilter() === filter.id : null"
+              [disabled]="!filter.enabled"
               (click)="selectOfferFilter(filter.id)"
             >
               {{ filter.name }}
@@ -240,7 +209,7 @@
           }
         </div>
         @if (offersState.categories().length > 0) {
-          <div class="offer-filters" aria-label="Filtrar ofertas por categoría">
+          <div class="offer-filters category-filters" aria-label="Filtrar ofertas por categoría">
             <button
               type="button"
               [class.offer-filter--active]="offerCategory() === 'all'"
@@ -265,8 +234,7 @@
         @if (offersState.offline()) {
           <div class="empty-state">
             <span aria-hidden="true">⌁</span>
-            <h3>Ofertas no disponibles sin conexión</h3>
-            <p>La lista familiar sigue funcionando con normalidad.</p>
+            <h3>Sin conexión</h3>
           </div>
         } @else if (offersState.loading()) {
           <div class="empty-state" aria-live="polite">
@@ -276,374 +244,262 @@
         } @else if (offersState.offers().length === 0) {
           <div class="empty-state">
             <span aria-hidden="true">％</span>
-            <h3>No hay ofertas para este filtro</h3>
+            <h3>No hay ofertas</h3>
           </div>
         } @else {
           @if (offersState.partial()) {
             <div class="connection-banner" role="status">
-              Un proveedor no respondió; se muestran los demás resultados.
+              No se pudieron actualizar todas las campañas.
             </div>
           }
           @if (relatedOfferMatches().length > 0) {
-            <div class="section-heading"><h3>🎯 Ofertas de tu lista</h3></div>
+            <div class="section-heading"><h3>🎯 Para tu lista</h3></div>
             <div class="match-list">
               @for (match of relatedOfferMatches(); track match.shoppingItemId) {
-                <article class="match-card">
-                  <div class="match-card-heading">
-                    <h3>
-                      <span aria-hidden="true">{{ categoryDetails(match.category).emoji }}</span>
-                      {{ match.shoppingItemName }}
-                    </h3>
-                    @if (match.dismissed) {
-                      <span>No automático</span>
-                    }
-                  </div>
-                  <p class="match-requested">
-                    Necesitas: {{ match.quantity }} {{ formatUnit(match.quantity, match.unit) }}
-                  </p>
+                <section
+                  class="match-card"
+                  [attr.aria-label]="'Ofertas relacionadas con ' + match.shoppingItemName"
+                >
+                  <h3>
+                    <span aria-hidden="true">{{ categoryDetails(match.category).emoji }}</span>
+                    {{ match.shoppingItemName }}
+                  </h3>
                   @for (candidate of match.candidates; track candidate.externalProductId) {
                     @if (candidateOffer(candidate); as offer) {
-                      <div class="match-candidate">
-                        <span class="relationship-badge relationship-badge--match">
-                          ✓ Coincidencia
-                        </span>
-                        <div>
-                          <strong>{{ candidate.productName }}</strong>
-                          <span>
-                            {{ candidate.brand || 'Lidl' }} ·
-                            {{ candidate.packageLabel || 'Formato no publicado' }}
-                          </span>
-                          <span>{{ confidenceLabel(candidate.confidence) }}</span>
-                        </div>
-                        <div class="package-fit" [attr.data-fit]="candidate.package.fit">
-                          <strong>{{ packageFitLabel(candidate) }}</strong>
-                          @if (packageNeedLabel(candidate); as needed) {
-                            <span>{{ needed }}</span>
-                          }
-                          @if (
-                            packageAmountLabel(
-                              candidate.package.purchasedAmount,
-                              candidate.package.unit
-                            );
-                            as purchased
-                          ) {
-                            <span>
-                              Compra: {{ candidate.package.approximate ? 'aprox. ' : ''
-                              }}{{ purchased }}
-                            </span>
-                          }
-                          @if (
-                            packageAmountLabel(
-                              candidate.package.excessAmount,
-                              candidate.package.unit
-                            );
-                            as excess
-                          ) {
-                            <span>Exceso: {{ excess }}</span>
-                          }
-                        </div>
-                        @if (candidate.package.costs.regularCostCents !== null) {
-                          <div class="estimated-costs">
-                            <span>
-                              Normal:
-                              {{ formatPrice(candidate.package.costs.regularCostCents) }}
-                            </span>
-                            @if (candidate.package.costs.generalOfferCostCents !== null) {
-                              <strong>
-                                Oferta:
-                                {{ formatPrice(candidate.package.costs.generalOfferCostCents) }}
-                              </strong>
-                            }
-                            @if (candidate.package.costs.lidlPlusCostCents !== null) {
-                              <span class="loyalty-note">
-                                Lidl Plus:
-                                {{ formatPrice(candidate.package.costs.lidlPlusCostCents) }}
-                              </span>
-                            }
-                          </div>
-                          @if (candidate.pricing.effectiveCostCents !== null) {
-                            <div class="effective-price">
-                              <strong>
-                                @if (candidate.pricing.effectivePriceReason === 'LOYALTY') {
-                                  ✓ Tu precio con Lidl Plus:
-                                } @else {
-                                  Tu precio:
-                                }
-                                {{ formatPrice(candidate.pricing.effectiveCostCents) }}
-                              </strong>
-                              <span>{{
-                                effectiveReasonLabel(candidate.pricing.effectivePriceReason)
-                              }}</span>
-                            </div>
-                          }
-                          @if (candidate.pricing.potentialLoyaltyCostCents !== null) {
-                            <p class="loyalty-config-hint">
-                              Con Lidl Plus sería
-                              {{ formatPrice(candidate.pricing.potentialLoyaltyCostCents) }}.
-                            </p>
-                          }
-                          @if (candidate.pricing.generalSavingCents !== null) {
-                            <p class="saving-note">
-                              Ahorras con la oferta:
-                              {{ formatPrice(candidate.pricing.generalSavingCents) }}
-                            </p>
-                          }
-                          @if (
-                            store.lidlPlusStatus() === 'ENABLED' &&
-                            candidate.pricing.additionalLoyaltySavingCents !== null
-                          ) {
-                            <p class="saving-note">
-                              Ahorro adicional Lidl Plus:
-                              {{ formatPrice(candidate.pricing.additionalLoyaltySavingCents) }}
-                            </p>
-                          }
-                          @if (candidate.pricing.totalSavingCents !== null) {
-                            <p class="saving-note">
-                              🔥 Ahorro total: {{ formatPrice(candidate.pricing.totalSavingCents) }}
-                            </p>
-                          }
+                      <article class="compact-offer-card compact-offer-card--match">
+                        <span class="visually-hidden"
+                          >Coincidencia con {{ match.shoppingItemName }}</span
+                        >
+                        @if (imageAvailable(candidate.imageUrl)) {
+                          <button
+                            class="offer-image-button"
+                            type="button"
+                            [attr.aria-label]="'Ampliar imagen de ' + candidate.productName"
+                            (click)="
+                              openImageViewer(candidate.imageUrl, candidate.productName, $event)
+                            "
+                          >
+                            <img
+                              class="offer-product-image"
+                              [src]="candidate.imageUrl"
+                              [alt]="candidate.productName"
+                              width="112"
+                              height="112"
+                              loading="lazy"
+                              decoding="async"
+                              (error)="markImageFailed(candidate.imageUrl)"
+                            />
+                          </button>
                         } @else {
-                          <div class="offer-price">
-                            <strong>Por envase: {{ formatPrice(offer.offerPriceCents) }}</strong>
-                            @if (offer.normalPriceCents !== null) {
-                              <span>Antes: {{ formatPrice(offer.normalPriceCents) }}</span>
-                            }
+                          <div class="offer-image-placeholder" aria-hidden="true">
+                            {{ categoryDetails(candidate.visualCategory).emoji }}
                           </div>
                         }
-                        <button
-                          class="secondary-button match-button"
-                          type="button"
-                          [disabled]="offersState.loading()"
-                          (click)="
-                            offersState.confirmMatch(
-                              match.shoppingItemId,
-                              candidate.externalProductId
-                            )
-                          "
-                        >
-                          {{ candidate.preferred ? 'Producto habitual' : 'Usar este producto' }}
-                        </button>
-                      </div>
+                        <div class="compact-offer-copy">
+                          <strong class="offer-product-name">{{ candidate.productName }}</strong>
+                          <span class="offer-format"
+                            >{{ candidate.brand || 'Lidl' }}
+                            @if (candidate.packageLabel) {
+                              · {{ candidate.packageLabel }}
+                            }
+                          </span>
+                          <div class="offer-price">
+                            <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
+                            @if (
+                              offer.normalPriceCents !== null &&
+                              offer.normalPriceCents > offer.offerPriceCents
+                            ) {
+                              <span>antes {{ formatPrice(offer.normalPriceCents) }}</span>
+                            }
+                          </div>
+                          @if (offer.lidlPlusPriceCents !== null) {
+                            <span class="loyalty-note"
+                              >Lidl Plus {{ formatPrice(offer.lidlPlusPriceCents) }}</span
+                            >
+                          }
+                          @if (packageNeedLabel(candidate); as needed) {
+                            <span class="offer-format">{{ needed }}</span>
+                          }
+                          <button
+                            class="compact-action"
+                            type="button"
+                            [disabled]="offersState.loading()"
+                            (click)="
+                              offersState.confirmMatch(
+                                match.shoppingItemId,
+                                candidate.externalProductId
+                              )
+                            "
+                          >
+                            {{ candidate.preferred ? 'Producto habitual' : 'Usar este producto' }}
+                          </button>
+                        </div>
+                      </article>
                     }
                   }
                   @if (!hasActiveIdentityOffer(match) && match.alternatives.length > 0) {
-                    <p class="no-exact-offer">No hay una oferta exacta ahora mismo.</p>
+                    <p class="no-exact-offer">Sin coincidencia exacta.</p>
                   }
-                  @if (match.alternatives.length > 0) {
-                    <div class="alternative-section">
-                      <h4>También podría servirte</h4>
-                      @for (
-                        alternative of match.alternatives;
-                        track alternative.externalProductId
-                      ) {
-                        @if (candidateOffer(alternative); as offer) {
-                          <div
-                            class="alternative-candidate"
-                            [attr.aria-label]="
-                              alternative.productName +
-                              ', producto parecido a ' +
-                              match.shoppingItemName +
-                              ', oferta ' +
-                              formatPrice(offer.offerPriceCents)
+                  @for (alternative of match.alternatives; track alternative.externalProductId) {
+                    @if (candidateOffer(alternative); as offer) {
+                      <article
+                        class="compact-offer-card compact-offer-card--alternative"
+                        [attr.aria-label]="
+                          alternative.productName +
+                          ', alternativa relacionada con ' +
+                          match.shoppingItemName
+                        "
+                      >
+                        <span class="visually-hidden"
+                          >Alternativa relacionada con {{ match.shoppingItemName }}</span
+                        >
+                        @if (imageAvailable(alternative.imageUrl)) {
+                          <button
+                            class="offer-image-button"
+                            type="button"
+                            [attr.aria-label]="'Ampliar imagen de ' + alternative.productName"
+                            (click)="
+                              openImageViewer(alternative.imageUrl, alternative.productName, $event)
                             "
                           >
-                            <span class="relationship-badge relationship-badge--alternative">
-                              ≈ Producto parecido
-                            </span>
-                            <div class="alternative-copy">
-                              <strong>{{ alternative.productName }}</strong>
-                              <span>
-                                {{ alternative.brand || 'Lidl' }} ·
-                                {{ alternative.packageLabel || 'Formato no publicado' }}
-                              </span>
-                            </div>
-                            <div class="alternative-price">
-                              @if (alternative.pricing.effectiveCostCents !== null) {
-                                <strong>
-                                  Tu precio:
-                                  {{ formatPrice(alternative.pricing.effectiveCostCents) }}
-                                </strong>
-                              } @else {
-                                <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
-                              }
-                              @if (offer.normalPriceCents !== null) {
-                                <span>Antes: {{ formatPrice(offer.normalPriceCents) }}</span>
-                              }
-                              @if (alternative.package.costs.lidlPlusCostCents !== null) {
-                                <span class="loyalty-note">
-                                  Lidl Plus:
-                                  {{ formatPrice(alternative.package.costs.lidlPlusCostCents) }}
-                                </span>
-                              }
-                            </div>
-                            @if (packageNeedLabel(alternative); as needed) {
-                              <p class="alternative-package">{{ needed }}</p>
-                            }
-                            <div class="alternative-actions">
-                              <button
-                                class="secondary-button"
-                                type="button"
-                                [disabled]="
-                                  offersState.alternativeSaving(
-                                    match.shoppingItemId,
-                                    alternative.externalProductId
-                                  )
-                                "
-                                (click)="
-                                  offersState.acceptAlternative(
-                                    match.shoppingItemId,
-                                    alternative.externalProductId
-                                  )
-                                "
-                              >
-                                {{
-                                  alternative.learned
-                                    ? '✓ Lo tendremos en cuenta'
-                                    : 'También me sirve'
-                                }}
-                              </button>
-                              <button
-                                class="text-button"
-                                type="button"
-                                [disabled]="
-                                  offersState.alternativeSaving(
-                                    match.shoppingItemId,
-                                    alternative.externalProductId
-                                  )
-                                "
-                                (click)="
-                                  offersState.dismissAlternative(
-                                    match.shoppingItemId,
-                                    alternative.externalProductId
-                                  )
-                                "
-                              >
-                                No me interesa
-                              </button>
-                            </div>
+                            <img
+                              class="offer-product-image"
+                              [src]="alternative.imageUrl"
+                              [alt]="alternative.productName"
+                              width="112"
+                              height="112"
+                              loading="lazy"
+                              decoding="async"
+                              (error)="markImageFailed(alternative.imageUrl)"
+                            />
+                          </button>
+                        } @else {
+                          <div class="offer-image-placeholder" aria-hidden="true">
+                            {{ categoryDetails(alternative.visualCategory).emoji }}
                           </div>
                         }
-                      }
-                    </div>
+                        <div class="compact-offer-copy">
+                          <strong class="offer-product-name">{{ alternative.productName }}</strong>
+                          <span class="offer-format"
+                            >{{ alternative.brand || 'Lidl' }}
+                            @if (alternative.packageLabel) {
+                              · {{ alternative.packageLabel }}
+                            }
+                          </span>
+                          <div class="offer-price">
+                            <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
+                            @if (
+                              offer.normalPriceCents !== null &&
+                              offer.normalPriceCents > offer.offerPriceCents
+                            ) {
+                              <span>antes {{ formatPrice(offer.normalPriceCents) }}</span>
+                            }
+                          </div>
+                          @if (offer.lidlPlusPriceCents !== null) {
+                            <span class="loyalty-note"
+                              >Lidl Plus {{ formatPrice(offer.lidlPlusPriceCents) }}</span
+                            >
+                          }
+                          <div class="alternative-actions">
+                            <button
+                              class="compact-action"
+                              type="button"
+                              [disabled]="
+                                offersState.alternativeSaving(
+                                  match.shoppingItemId,
+                                  alternative.externalProductId
+                                )
+                              "
+                              (click)="
+                                offersState.acceptAlternative(
+                                  match.shoppingItemId,
+                                  alternative.externalProductId
+                                )
+                              "
+                            >
+                              {{
+                                alternative.learned ? 'Lo tendremos en cuenta' : 'También me sirve'
+                              }}
+                            </button>
+                            <button
+                              class="text-button"
+                              type="button"
+                              [disabled]="
+                                offersState.alternativeSaving(
+                                  match.shoppingItemId,
+                                  alternative.externalProductId
+                                )
+                              "
+                              (click)="
+                                offersState.dismissAlternative(
+                                  match.shoppingItemId,
+                                  alternative.externalProductId
+                                )
+                              "
+                            >
+                              No me interesa
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    }
                   }
-                </article>
+                </section>
               }
             </div>
-          } @else {
-            <p class="supporting-text">No hay ofertas relacionadas con tu lista ahora mismo.</p>
-          }
-
-          @if (pendingOfferMatches().length > 0) {
-            <details class="match-suggestions">
-              <summary>Revisar productos relacionados</summary>
-              @for (match of pendingOfferMatches(); track match.shoppingItemId) {
-                <div class="match-review-item">
-                  <strong>
-                    <span aria-hidden="true">{{ categoryDetails(match.category).emoji }}</span>
-                    {{ match.shoppingItemName }}
-                  </strong>
-                  <p>¿Es alguno de estos?</p>
-                  @for (candidate of match.candidates; track candidate.externalProductId) {
-                    <button
-                      type="button"
-                      [class.match-choice--selected]="candidate.preferred"
-                      [disabled]="offersState.loading()"
-                      (click)="
-                        offersState.confirmMatch(match.shoppingItemId, candidate.externalProductId)
-                      "
-                    >
-                      <span>{{ candidate.productName }}</span>
-                      <small>
-                        {{ candidate.packageLabel || 'Formato no publicado' }} ·
-                        {{ confidenceLabel(candidate.confidence) }}
-                        @if (packageNeedLabel(candidate); as needed) {
-                          · {{ needed }}
-                        }
-                        @if (candidate.package.costs.generalOfferCostCents !== null) {
-                          · Total oferta
-                          {{ formatPrice(candidate.package.costs.generalOfferCostCents) }}
-                        } @else if (candidate.package.costs.regularCostCents !== null) {
-                          · Total estimado
-                          {{ formatPrice(candidate.package.costs.regularCostCents) }}
-                        }
-                        @if (candidate.currentPriceCents !== null) {
-                          · Precio catálogo {{ formatPrice(candidate.currentPriceCents) }}
-                        }
-                      </small>
-                    </button>
-                  }
-                  <button
-                    class="text-button"
-                    type="button"
-                    [disabled]="offersState.loading()"
-                    (click)="offersState.dismissMatch(match.shoppingItemId)"
-                  >
-                    No relacionar automáticamente
-                  </button>
-                </div>
-              }
-            </details>
           }
 
           @if (otherActiveOffers().length > 0) {
-            <div class="section-heading"><h3>Todas las ofertas Lidl</h3></div>
+            <div class="section-heading"><h3>Ofertas</h3></div>
             <div class="offer-list">
               @for (offer of otherActiveOffers(); track offer.id) {
-                <article class="offer-card" [class.offer-card--related]="offer.relatedToList">
-                  <div class="offer-card-heading">
-                    <span>{{ offer.supermarketName }}</span>
-                    @if (offer.relatedToList) {
-                      <strong>Está en tu lista</strong>
-                    }
-                  </div>
-                  <h3>
-                    <span aria-hidden="true">{{
-                      categoryDetails(offer.visualCategory).emoji
-                    }}</span>
-                    {{ offer.productName }}
-                  </h3>
-                  <p>
-                    {{ offer.brand || 'Lidl' }} · {{ offer.packageLabel || 'Formato no publicado' }}
-                  </p>
-                  <div class="offer-price">
-                    <strong>Ahora: {{ formatPrice(offer.offerPriceCents) }}</strong>
-                    @if (offer.normalPriceCents !== null) {
-                      <span>Antes: {{ formatPrice(offer.normalPriceCents) }}</span>
-                    }
-                  </div>
-                  @if (offer.lidlPlusPriceCents !== null) {
-                    <p class="loyalty-note">
-                      Lidl Plus: {{ formatPrice(offer.lidlPlusPriceCents) }}
-                    </p>
-                  }
-                  @if (offer.pricing.effectiveCostCents !== null) {
-                    <div class="effective-price">
-                      <strong>
-                        @if (offer.pricing.effectivePriceReason === 'LOYALTY') {
-                          ✓ Tu precio con Lidl Plus:
-                        } @else {
-                          Tu precio:
-                        }
-                        {{ formatPrice(offer.pricing.effectiveCostCents) }}
-                      </strong>
-                      <span>{{ effectiveReasonLabel(offer.pricing.effectivePriceReason) }}</span>
+                <article class="compact-offer-card">
+                  @if (imageAvailable(offer.imageUrl)) {
+                    <button
+                      class="offer-image-button"
+                      type="button"
+                      [attr.aria-label]="'Ampliar imagen de ' + offer.productName"
+                      (click)="openImageViewer(offer.imageUrl, offer.productName, $event)"
+                    >
+                      <img
+                        class="offer-product-image"
+                        [src]="offer.imageUrl"
+                        [alt]="offer.productName"
+                        width="112"
+                        height="112"
+                        loading="lazy"
+                        decoding="async"
+                        (error)="markImageFailed(offer.imageUrl)"
+                      />
+                    </button>
+                  } @else {
+                    <div class="offer-image-placeholder" aria-hidden="true">
+                      {{ categoryDetails(offer.visualCategory).emoji }}
                     </div>
                   }
-                  @if (offer.pricing.potentialLoyaltyCostCents !== null) {
-                    <p class="loyalty-config-hint">
-                      Con Lidl Plus sería
-                      {{ formatPrice(offer.pricing.potentialLoyaltyCostCents) }}.
-                    </p>
-                  }
-                  <p class="offer-promotion">{{ offer.promotionType }}</p>
-                  <p>
-                    Válido: {{ formatOfferDate(offer.validFrom) }} –
-                    {{ formatOfferDate(offer.validUntil) }}
-                  </p>
-                  <p>
-                    Badajoz · {{ offer.channel === 'STORE' ? 'Sólo en tienda' : offer.channel }}
-                  </p>
-                  <p class="catalog-note">Producto publicado · disponibilidad no confirmada</p>
+                  <div class="compact-offer-copy">
+                    <strong class="offer-product-name">{{ offer.productName }}</strong>
+                    <span class="offer-format"
+                      >{{ offer.brand || 'Lidl' }}
+                      @if (offer.packageLabel) {
+                        · {{ offer.packageLabel }}
+                      }
+                    </span>
+                    <div class="offer-price">
+                      <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
+                      @if (
+                        offer.normalPriceCents !== null &&
+                        offer.normalPriceCents > offer.offerPriceCents
+                      ) {
+                        <span>antes {{ formatPrice(offer.normalPriceCents) }}</span>
+                      }
+                    </div>
+                    @if (offer.lidlPlusPriceCents !== null) {
+                      <span class="loyalty-note"
+                        >Lidl Plus {{ formatPrice(offer.lidlPlusPriceCents) }}</span
+                      >
+                    }
+                  </div>
                 </article>
               }
             </div>
@@ -652,39 +508,54 @@
             <div class="section-heading"><h3>Próximamente</h3></div>
             <div class="offer-list">
               @for (offer of upcomingOffers(); track offer.id) {
-                <article class="offer-card" [class.offer-card--related]="offer.relatedToList">
-                  <div class="offer-card-heading">
-                    <span>{{ offer.supermarketName }}</span>
-                    @if (offer.relatedToList) {
-                      <strong>Está en tu lista</strong>
-                    }
-                  </div>
-                  <h3>
-                    <span aria-hidden="true">{{
-                      categoryDetails(offer.visualCategory).emoji
-                    }}</span>
-                    {{ offer.productName }}
-                  </h3>
-                  <p>
-                    {{ offer.brand || 'Lidl' }} · {{ offer.packageLabel || 'Formato no publicado' }}
-                  </p>
-                  <div class="offer-price">
-                    <strong>Ahora: {{ formatPrice(offer.offerPriceCents) }}</strong>
-                    @if (offer.normalPriceCents !== null) {
-                      <span>Antes: {{ formatPrice(offer.normalPriceCents) }}</span>
-                    }
-                  </div>
-                  @if (offer.lidlPlusPriceCents !== null) {
-                    <p class="loyalty-note">
-                      Lidl Plus: {{ formatPrice(offer.lidlPlusPriceCents) }}
-                    </p>
+                <article class="compact-offer-card compact-offer-card--upcoming">
+                  @if (imageAvailable(offer.imageUrl)) {
+                    <button
+                      class="offer-image-button"
+                      type="button"
+                      [attr.aria-label]="'Ampliar imagen de ' + offer.productName"
+                      (click)="openImageViewer(offer.imageUrl, offer.productName, $event)"
+                    >
+                      <img
+                        class="offer-product-image"
+                        [src]="offer.imageUrl"
+                        [alt]="offer.productName"
+                        width="112"
+                        height="112"
+                        loading="lazy"
+                        decoding="async"
+                        (error)="markImageFailed(offer.imageUrl)"
+                      />
+                    </button>
+                  } @else {
+                    <div class="offer-image-placeholder" aria-hidden="true">
+                      {{ categoryDetails(offer.visualCategory).emoji }}
+                    </div>
                   }
-                  <p class="offer-promotion">{{ offer.promotionType }}</p>
-                  <p>Disponible desde {{ formatOfferDate(offer.validFrom) }}</p>
-                  <p>
-                    Badajoz · {{ offer.channel === 'STORE' ? 'Sólo en tienda' : offer.channel }}
-                  </p>
-                  <p class="catalog-note">Producto publicado · disponibilidad no confirmada</p>
+                  <div class="compact-offer-copy">
+                    <strong class="offer-product-name">{{ offer.productName }}</strong>
+                    <span class="offer-format"
+                      >{{ offer.brand || 'Lidl' }}
+                      @if (offer.packageLabel) {
+                        · {{ offer.packageLabel }}
+                      }
+                    </span>
+                    <div class="offer-price">
+                      <strong>{{ formatPrice(offer.offerPriceCents) }}</strong>
+                      @if (
+                        offer.normalPriceCents !== null &&
+                        offer.normalPriceCents > offer.offerPriceCents
+                      ) {
+                        <span>antes {{ formatPrice(offer.normalPriceCents) }}</span>
+                      }
+                    </div>
+                    @if (offer.lidlPlusPriceCents !== null) {
+                      <span class="loyalty-note"
+                        >Lidl Plus {{ formatPrice(offer.lidlPlusPriceCents) }}</span
+                      >
+                    }
+                    <span class="offer-format">Desde {{ formatOfferDate(offer.validFrom) }}</span>
+                  </div>
                 </article>
               }
             </div>
@@ -708,7 +579,7 @@
         <div class="connection-banner connection-banner--offline" role="status">
           <strong>Sin conexión</strong>
           <span>
-            Lista guardada disponible. Puedes marcar productos
+            Puedes seguir usando tu lista
             @if (store.pendingOperations() > 0) {
               · {{ store.pendingOperations() }} cambio pendiente
             }
@@ -717,12 +588,10 @@
       } @else if (store.syncing()) {
         <div class="connection-banner" role="status">
           <strong>Sincronizando…</strong>
-          <span>Comprobando la versión guardada en el hogar.</span>
         </div>
       } @else if (store.realtimeStatus() === 'CONNECTING') {
         <div class="connection-banner" role="status">
           <strong>Conectando…</strong>
-          <span>La lista se actualizará automáticamente.</span>
         </div>
       }
 
@@ -814,7 +683,6 @@
         <section class="habits" aria-labelledby="habits-title">
           <div class="section-heading">
             <h2 id="habits-title">Habituales</h2>
-            <span>Añadir con un toque</span>
           </div>
           <div class="habit-list">
             @for (habit of store.habits(); track habit.id) {
@@ -857,7 +725,6 @@
           <div class="empty-state">
             <span aria-hidden="true">📝</span>
             <h3>La lista está vacía</h3>
-            <p>Escribe arriba lo que falta y toca “Añadir”.</p>
           </div>
         } @else {
           <ul class="shopping-list">
@@ -933,6 +800,37 @@
     </nav>
   }
 </div>
+
+@if (imageViewer(); as image) {
+  <div
+    class="image-viewer-backdrop"
+    role="presentation"
+    (click)="closeImageViewerFromBackdrop($event)"
+    (keydown.escape)="closeImageViewer()"
+  >
+    <section
+      class="image-viewer-dialog"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="'Imagen de ' + image.name"
+    >
+      <button
+        class="image-viewer-close"
+        type="button"
+        aria-label="Cerrar imagen"
+        (click)="closeImageViewer()"
+      >
+        ×
+      </button>
+      <img
+        [src]="image.url"
+        [alt]="image.name"
+        decoding="async"
+        (error)="markImageFailed(image.url)"
+      />
+    </section>
+  </div>
+}
 
 @if (pairingDetails(); as pairing) {
   <div class="dialog-backdrop" role="presentation">

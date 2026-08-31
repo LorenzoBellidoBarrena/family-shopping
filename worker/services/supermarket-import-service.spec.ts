@@ -249,6 +249,12 @@ describe('SupermarketImportService', () => {
         (SELECT COUNT(*) FROM import_runs WHERE provider = 'lidl') AS runs`,
     ).first<{ stores: number; products: number; prices: number; offers: number; runs: number }>();
     expect(counts).toEqual({ stores: 2, products: 3, prices: 3, offers: 5, runs: 2 });
+    expect(
+      await testEnv.DB.prepare(
+        `SELECT COUNT(*) AS count FROM external_products
+           WHERE supermarket_id = 'lidl' AND image_url IS NOT NULL`,
+      ).first<{ count: number }>(),
+    ).toEqual({ count: 1 });
 
     const published = await new LidlD1OffersProvider(
       testEnv.DB,
@@ -260,6 +266,7 @@ describe('SupermarketImportService', () => {
     expect(grapes).toMatchObject({
       fixture: false,
       city: 'Badajoz',
+      imageUrl: 'https://www.lidl.es/assets/gcp6548c7bdcfac401fb82a93f7c795d8d9.png',
       normalPriceCents: 299,
       offerPriceCents: 235,
       lidlPlusPriceCents: 189,

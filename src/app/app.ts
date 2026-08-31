@@ -1,5 +1,13 @@
 import { DOCUMENT } from '@angular/common';
-import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  DestroyRef,
+  HostListener,
+  inject,
+  OnInit,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SwUpdate } from '@angular/service-worker';
@@ -9,8 +17,6 @@ import type {
   OfferBrowseCategory,
   ListMatchCandidate,
   ShoppingItemOfferMatch,
-  PackageCalculation,
-  EffectivePriceReason,
   PairingDetails,
   ProductPreference,
   ProductCategory,
@@ -39,19 +45,22 @@ export class App implements OnInit {
   protected readonly productCategories = PRODUCT_CATEGORIES;
   protected readonly categoryDetails = productCategoryDefinition;
   protected readonly view = signal<'list' | 'offers' | 'settings'>('list');
-  protected readonly offerFilter = signal<'all' | OfferSupermarketId>('all');
+  protected readonly offerFilter = signal<OfferSupermarketId>('lidl');
   protected readonly offerCategory = signal<'all' | OfferBrowseCategory>('all');
   private readonly offerVisibleLimit = signal(24);
   protected readonly offerFilters: readonly {
-    id: 'all' | OfferSupermarketId;
+    id: OfferSupermarketId;
     name: string;
+    enabled: boolean;
   }[] = [
-    { id: 'all', name: 'Todas' },
-    { id: 'lidl', name: 'Lidl' },
-    { id: 'mercadona', name: 'Mercadona' },
-    { id: 'carrefour', name: 'Carrefour' },
-    { id: 'dia', name: 'DIA' },
+    { id: 'lidl', name: 'Lidl', enabled: true },
+    { id: 'mercadona', name: 'Mercadona 🔒', enabled: false },
+    { id: 'carrefour', name: 'Carrefour 🔒', enabled: false },
+    { id: 'dia', name: 'DIA 🔒', enabled: false },
   ];
+  protected readonly imageViewer = signal<{ url: string; name: string } | null>(null);
+  private readonly failedImageUrls = signal<ReadonlySet<string>>(new Set());
+  private imageViewerTrigger: HTMLElement | null = null;
   protected readonly editingItem = signal<ShoppingItem | null>(null);
   protected readonly deletingItem = signal<ShoppingItem | null>(null);
   protected readonly clearDialogOpen = signal(false);
@@ -125,7 +134,10 @@ export class App implements OnInit {
   protected editCategory: ProductCategory = 'OTHER';
 
   constructor() {
-    this.destroyRef.onDestroy(() => this.stopPairingTimer());
+    this.destroyRef.onDestroy(() => {
+      this.stopPairingTimer();
+      this.document.body.classList.remove('image-viewer-open');
+    });
     this.enableAutomaticAppUpdates();
   }
 
@@ -300,30 +312,62 @@ export class App implements OnInit {
     this.view.set('offers');
     const filter = this.offerFilter();
     const category = this.offerCategory();
-    this.offersState.enter(
-      filter === 'all' ? undefined : filter,
-      category === 'all' ? undefined : category,
-    );
+    this.offersState.enter(filter, category === 'all' ? undefined : category);
   }
 
-  protected selectOfferFilter(filter: 'all' | OfferSupermarketId): void {
+  protected selectOfferFilter(filter: OfferSupermarketId): void {
+    if (filter !== 'lidl') return;
     this.offerVisibleLimit.set(24);
     this.offerFilter.set(filter);
     const category = this.offerCategory();
-    void this.offersState.load(
-      filter === 'all' ? undefined : filter,
-      category === 'all' ? undefined : category,
-    );
+    void this.offersState.load(filter, category === 'all' ? undefined : category);
   }
 
   protected selectOfferCategory(category: 'all' | OfferBrowseCategory): void {
     this.offerVisibleLimit.set(24);
     this.offerCategory.set(category);
     const filter = this.offerFilter();
-    void this.offersState.load(
-      filter === 'all' ? undefined : filter,
-      category === 'all' ? undefined : category,
+    void this.offersState.load(filter, category === 'all' ? undefined : category);
+  }
+
+  protected imageAvailable(url: string | null): url is string {
+    return Boolean(url && !this.failedImageUrls().has(url));
+  }
+
+  protected markImageFailed(url: string): void {
+    if (this.failedImageUrls().has(url)) return;
+    this.failedImageUrls.update((current) => new Set([...current, url]));
+    if (this.imageViewer()?.url === url) this.closeImageViewer();
+  }
+
+  protected openImageViewer(url: string, name: string, event: Event): void {
+    if (!this.imageAvailable(url)) return;
+    this.imageViewerTrigger = event.currentTarget as HTMLElement;
+    this.imageViewer.set({ url, name });
+    this.document.body.classList.add('image-viewer-open');
+    this.document.defaultView?.setTimeout(
+      () =>
+        (this.document.querySelector('.image-viewer-close') as HTMLButtonElement | null)?.focus(),
+      0,
     );
+  }
+
+  protected closeImageViewer(): void {
+    if (!this.imageViewer()) return;
+    this.imageViewer.set(null);
+    this.document.body.classList.remove('image-viewer-open');
+    const trigger = this.imageViewerTrigger;
+    this.imageViewerTrigger = null;
+    queueMicrotask(() => trigger?.focus());
+  }
+
+  protected closeImageViewerFromBackdrop(event: Event): void {
+    if (event.target === event.currentTarget) this.closeImageViewer();
+  }
+
+  @HostListener('document:keydown.escape')
+  protected closeImageViewerWithEscape(): void {
+    this.closeImageViewer();
   }
 
   protected showList(): void {
@@ -356,49 +400,8 @@ export class App implements OnInit {
 
   protected packageNeedLabel(candidate: ListMatchCandidate): string | null {
     const packs = candidate.package.packsNeeded;
-    if (packs === null) return null;
+    if (packs === null || packs <= 1) return null;
     return `Necesitarías ${packs} ${packs === 1 ? 'envase' : 'envases'}`;
-  }
-
-  protected packageFitLabel(candidate: ListMatchCandidate): string {
-    const labels: Record<ListMatchCandidate['package']['fit'], string> = {
-      EXACT: 'Cantidad exacta',
-      GOOD: candidate.package.approximate ? 'Cálculo aproximado' : 'Formato compatible',
-      OVERBUY: 'Compra con excedente',
-      UNKNOWN: 'Cantidad no calculable',
-      INCOMPATIBLE: 'Unidad incompatible',
-    };
-    return labels[candidate.package.fit];
-  }
-
-  protected packageAmountLabel(
-    amount: number | null,
-    unit: PackageCalculation['unit'],
-  ): string | null {
-    if (amount === null || unit === null) return null;
-    if (unit === 'G' || unit === 'ML') {
-      const largeUnit = unit === 'G' ? 'kg' : 'l';
-      const smallUnit = unit === 'G' ? 'g' : 'ml';
-      const value = amount >= 1000 ? amount / 1000 : amount;
-      return `${new Intl.NumberFormat('es-ES', { maximumFractionDigits: 3 }).format(value)} ${
-        amount >= 1000 ? largeUnit : smallUnit
-      }`;
-    }
-    return `${amount} ${unit === 'COUNT' ? (amount === 1 ? 'unidad' : 'unidades') : amount === 1 ? 'pack' : 'packs'}`;
-  }
-
-  protected effectiveReasonLabel(reason: EffectivePriceReason | null): string {
-    const labels: Record<EffectivePriceReason, string> = {
-      REGULAR: 'Precio normal',
-      GENERAL_OFFER: 'Oferta general',
-      LOYALTY: 'Lidl Plus',
-      QUANTITY_PROMOTION: 'Promoción por cantidad',
-    };
-    return reason ? labels[reason] : '';
-  }
-
-  protected confidenceLabel(confidence: ListMatchCandidate['confidence']): string {
-    return confidence === 'HIGH' ? 'Coincidencia alta' : 'Sugerencia';
   }
 
   protected formatOfferDate(value: string | null): string {

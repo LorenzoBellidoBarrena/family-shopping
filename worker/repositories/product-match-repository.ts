@@ -6,6 +6,7 @@ export interface CatalogProductForMatching {
   name: string;
   normalizedName: string;
   brand: string | null;
+  imageUrl: string | null;
   commercialCategory: string | null;
   visualCategory: ProductCategory;
   packageQuantity: number | null;
@@ -35,6 +36,7 @@ interface ProductRow {
   name: string;
   normalized_name: string;
   brand: string | null;
+  image_url: string | null;
   category: string | null;
   visual_category: ProductCategory;
   package_quantity: number | null;
@@ -50,6 +52,7 @@ const mapProduct = (row: ProductRow): CatalogProductForMatching => ({
   name: row.name,
   normalizedName: row.normalized_name,
   brand: row.brand,
+  imageUrl: row.image_url,
   commercialCategory: row.category,
   visualCategory: row.visual_category,
   packageQuantity: row.package_quantity,
@@ -79,7 +82,7 @@ export class ProductMatchRepository {
   async listCurrentLidlProducts(): Promise<CatalogProductForMatching[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT ep.id, ep.name, ep.normalized_name, ep.brand, ep.category, ep.visual_category,
+        `SELECT ep.id, ep.name, ep.normalized_name, ep.brand, ep.image_url, ep.category, ep.visual_category,
                 ep.package_quantity, ep.package_unit, ep.package_description,
                 (SELECT pp.price_cents FROM product_prices pp
                  WHERE pp.product_id = ep.id
@@ -103,7 +106,7 @@ export class ProductMatchRepository {
   ): Promise<CatalogProductForMatching | null> {
     const row = await this.db
       .prepare(
-        `SELECT ep.id, ep.name, ep.normalized_name, ep.brand, ep.category, ep.visual_category,
+        `SELECT ep.id, ep.name, ep.normalized_name, ep.brand, ep.image_url, ep.category, ep.visual_category,
                 ep.package_quantity, ep.package_unit, ep.package_description,
                 (SELECT pp.price_cents FROM product_prices pp
                  WHERE pp.product_id = ep.id

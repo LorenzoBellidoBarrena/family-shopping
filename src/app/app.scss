@@ -336,6 +336,44 @@ button:disabled {
   justify-content: space-between;
 }
 
+.offers-heading h2 {
+  margin-bottom: 0.2rem;
+}
+
+.offers-heading p {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.supermarket-status {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
+}
+
+.supermarket-status button {
+  min-height: 2.3rem;
+  flex: 0 0 auto;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.supermarket-status .offer-filter--active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-weight: 800;
+}
+
+.supermarket-status button:disabled {
+  opacity: 0.6;
+}
+
 .offers-heading > span {
   color: var(--muted);
   font-size: 0.85rem;
@@ -377,11 +415,138 @@ button:disabled {
 
 .match-card {
   display: grid;
-  gap: 0.75rem;
-  padding: 1rem;
-  border: 1px solid var(--brand);
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
   border-radius: 1rem;
-  background: var(--brand-soft);
+  background: var(--surface);
+}
+
+.match-card > h3 {
+  font-size: 0.95rem;
+}
+
+.compact-offer-card {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  min-height: 7rem;
+  padding: 0.65rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.95rem;
+  background: var(--surface-raised);
+}
+
+.compact-offer-card--match {
+  border-color: #70aa88;
+  box-shadow: inset 0.25rem 0 #2c7a55;
+  background: #f7fcf9;
+}
+
+.compact-offer-card--alternative {
+  border-color: #e1ad62;
+  box-shadow: inset 0.25rem 0 #d9871b;
+  background: #fffaf2;
+}
+
+.compact-offer-card--upcoming {
+  background: #fafbfa;
+}
+
+.offer-image-button,
+.offer-image-placeholder {
+  width: 6.5rem;
+  height: 6.5rem;
+  align-self: start;
+  border-radius: 0.75rem;
+}
+
+.offer-image-button {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.offer-image-button:focus-visible {
+  outline: 0.2rem solid var(--focus);
+  outline-offset: 0.15rem;
+}
+
+.offer-product-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.offer-image-placeholder {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 2rem;
+}
+
+.compact-offer-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+  justify-content: center;
+}
+
+.offer-product-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.94rem;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.offer-format {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.77rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-offer-card .offer-price {
+  flex-wrap: wrap;
+  gap: 0.15rem 0.55rem;
+  justify-content: flex-start;
+}
+
+.compact-offer-card .offer-price strong {
+  font-size: 1.3rem;
+}
+
+.compact-offer-card .offer-price span,
+.compact-offer-card .loyalty-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.compact-offer-card .loyalty-note {
+  color: var(--brand-strong);
+  font-weight: 800;
+}
+
+.compact-action {
+  width: fit-content;
+  min-height: 2rem;
+  margin-top: 0.2rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--brand);
+  border-radius: 0.55rem;
+  background: #fff;
+  color: var(--brand-strong);
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
 .match-card-heading {
@@ -475,6 +640,10 @@ button:disabled {
   flex-wrap: wrap;
   gap: 0.35rem 0.75rem;
   align-items: center;
+}
+
+.compact-offer-card .alternative-actions {
+  gap: 0.25rem 0.6rem;
 }
 
 .match-candidate > div:first-child {
@@ -934,6 +1103,53 @@ nav {
   overflow-y: auto;
 }
 
+.image-viewer-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  place-items: center;
+  background: rgb(10 15 12 / 82%);
+}
+
+.image-viewer-dialog {
+  position: relative;
+  display: grid;
+  width: min(100%, 42rem);
+  height: min(82dvh, 42rem);
+  padding: 1rem;
+  place-items: center;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 35%);
+}
+
+.image-viewer-dialog img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.image-viewer-close {
+  position: absolute;
+  z-index: 1;
+  top: 0.55rem;
+  right: 0.55rem;
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 92%);
+  color: var(--text);
+  font-size: 1.6rem;
+  box-shadow: 0 0.2rem 0.8rem rgb(0 0 0 / 15%);
+}
+
 .dialog-card {
   display: grid;
   gap: 0.9rem;
@@ -1052,6 +1268,18 @@ nav {
 
   .dialog-backdrop {
     align-items: center;
+  }
+}
+
+@media (max-width: 23rem) {
+  .compact-offer-card {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+
+  .offer-image-button,
+  .offer-image-placeholder {
+    width: 5.5rem;
+    height: 5.5rem;
   }
 }
 

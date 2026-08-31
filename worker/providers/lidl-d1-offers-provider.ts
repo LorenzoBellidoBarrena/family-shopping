@@ -9,6 +9,7 @@ interface OfferRow {
   name: string;
   normalized_name: string;
   brand: string | null;
+  image_url: string | null;
   category: string | null;
   visual_category: ProductCategory;
   offer_browse_category: OfferBrowseCategory;
@@ -111,7 +112,7 @@ export class LidlD1OffersProvider implements SupermarketProvider {
   private async queryPublishedOffers(category?: OfferBrowseCategory): Promise<CatalogOffer[]> {
     const categoryClause = category ? 'AND ep.offer_browse_category = ?' : '';
     const prepared = this.db.prepare(
-      `SELECT o.id, o.product_id, ep.name, ep.normalized_name, ep.brand, ep.category,
+      `SELECT o.id, o.product_id, ep.name, ep.normalized_name, ep.brand, ep.image_url, ep.category,
                 ep.visual_category, ep.offer_browse_category, ep.package_quantity,
                 ep.package_unit, ep.package_description,
                 pp.price_cents AS base_price_cents, pp.unit_price_cents,
@@ -164,6 +165,7 @@ export class LidlD1OffersProvider implements SupermarketProvider {
         productName: row.name,
         normalizedProductName: row.normalized_name,
         brand: row.brand,
+        imageUrl: row.image_url,
         category: row.category,
         visualCategory: row.visual_category,
         offerBrowseCategory: row.offer_browse_category,

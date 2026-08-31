@@ -93,6 +93,7 @@ export interface CatalogOffer {
   productName: string;
   normalizedProductName: string;
   brand: string | null;
+  imageUrl: string | null;
   category: string | null;
   visualCategory: ProductCategory;
   offerBrowseCategory: OfferBrowseCategory;
@@ -176,6 +177,7 @@ export interface ListMatchCandidate {
   productName: string;
   normalizedProductName: string;
   brand: string | null;
+  imageUrl: string | null;
   commercialCategory: string | null;
   visualCategory: ProductCategory;
   packageLabel: string | null;

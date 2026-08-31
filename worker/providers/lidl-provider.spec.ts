@@ -49,6 +49,7 @@ describe('LidlProvider', () => {
     expect(products[0]).toMatchObject({
       externalId: '11029919',
       name: 'Uva blanca sin semilla',
+      imageUrl: 'https://www.lidl.es/assets/gcp6548c7bdcfac401fb82a93f7c795d8d9.png',
       offerBrowseCategory: 'FRESH',
       priceCents: 235,
       packageQuantity: 750,
@@ -108,6 +109,21 @@ describe('LidlProvider', () => {
     expect(() => provider.parse(campaignCurrent, 'https://example.com/campaign')).toThrow(
       'LIDL_SOURCE_NOT_ALLOWED',
     );
+  });
+
+  it('rejects product images outside the observed official Lidl allowlist', () => {
+    const provider = new LidlProvider();
+    const unsafe = campaignCurrent.replace(
+      /"image":"https:[^"]+"/u,
+      '"image":"https://example.com/product.png"',
+    );
+    const credentialed = campaignCurrent.replace(
+      /"image":"https:[^"]+"/u,
+      '"image":"https://user:secret@www.lidl.es/product.png"',
+    );
+
+    expect(provider.normalize(provider.parse(unsafe, currentUrl)[0]).imageUrl).toBeNull();
+    expect(provider.normalize(provider.parse(credentialed, currentUrl)[0]).imageUrl).toBeNull();
   });
 
   it('blocks redirects to arbitrary hosts', async () => {

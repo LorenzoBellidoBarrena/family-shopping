@@ -45,6 +45,10 @@ body:has(.dialog-backdrop) {
   overflow: hidden;
 }
 
+body.image-viewer-open {
+  overflow: hidden;
+}
+
 button,
 input,
 select,

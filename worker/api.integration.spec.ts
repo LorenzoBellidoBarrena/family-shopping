@@ -243,6 +243,9 @@ describe('production hardening', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('content-security-policy')).toContain("script-src 'self'");
+    expect(response.headers.get('content-security-policy')).toContain(
+      "img-src 'self' data: https://www.lidl.es https://imgproxy.leaflets.schwarz https://lidl.media.schwarz",
+    );
     expect(response.headers.get('content-security-policy')).not.toContain("'unsafe-inline'");
     expect(response.headers.get('strict-transport-security')).toBe('max-age=31536000');
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');

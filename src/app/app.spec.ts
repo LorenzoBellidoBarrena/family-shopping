@@ -103,6 +103,7 @@ class FakeShoppingApi {
       productName: 'Leche entera 1 litro',
       normalizedProductName: 'leche entera 1 litro',
       brand: 'Fixture Lidl',
+      imageUrl: 'https://www.lidl.es/assets/leche-entera.png',
       category: 'Lácteos',
       visualCategory: 'DAIRY',
       offerBrowseCategory: 'FOOD',
@@ -182,6 +183,7 @@ class FakeShoppingApi {
             productName: 'Leche entera 1 litro',
             normalizedProductName: 'leche entera 1 litro',
             brand: 'Fixture Lidl',
+            imageUrl: this.offerData[0].imageUrl,
             commercialCategory: 'Lácteos',
             visualCategory: 'DAIRY',
             packageLabel: '1 l',
@@ -352,6 +354,7 @@ class FakeShoppingApi {
       productName: offer.productName,
       normalizedProductName: offer.normalizedProductName,
       brand: 'SINTÉTICO',
+      imageUrl: offer.imageUrl,
       commercialCategory: 'Congelados/Pollo empanado',
       visualCategory: 'MEAT',
       packageLabel: '400 g',
@@ -631,24 +634,27 @@ describe('Shopping list interface', () => {
     expect(fixture.nativeElement.textContent).toContain('No se pudo guardar');
   });
 
-  it('shows related list offers separately and filters by supermarket', async () => {
+  it('shows concise related Lidl offers and keeps other providers disabled', async () => {
     button('％ Ofertas').click();
     await settle();
 
     const card = fixture.nativeElement.querySelector('.match-card') as HTMLElement;
-    expect(api.getOffers.mock.calls[0]?.slice(0, 2)).toEqual([undefined, undefined]);
+    expect(api.getOffers.mock.calls[0]?.slice(0, 2)).toEqual(['lidl', undefined]);
     expect(card.textContent).toContain('Leche entera 1 litro');
     expect(card.textContent).toContain('Leche');
     expect(card.textContent).toContain('Necesitarías 6 envases');
-    expect(card.textContent).toContain('Normal: 6,30');
-    expect(card.textContent).toContain('Oferta: 5,34');
-    expect(card.textContent).toContain('Ahorras');
+    expect(card.textContent).toContain('0,89');
+    expect(card.textContent).not.toContain('confidence');
 
-    button('DIA').click();
+    const calls = api.getOffers.mock.calls.length;
+    for (const name of ['Mercadona 🔒', 'Carrefour 🔒', 'DIA 🔒']) {
+      const locked = button(name);
+      expect(locked.disabled).toBe(true);
+      locked.click();
+    }
     await settle();
-    expect(api.getOffers.mock.calls.at(-1)?.slice(0, 2)).toEqual(['dia', undefined]);
-    expect(fixture.nativeElement.querySelectorAll('.offer-card')).toHaveLength(0);
-    expect(fixture.nativeElement.querySelectorAll('.match-card')).toHaveLength(0);
+    expect(api.getOffers).toHaveBeenCalledTimes(calls);
+    expect(button('Lidl').disabled).toBe(false);
   });
 
   it('shows matches in green and alternatives in orange with optimistic household feedback', async () => {
@@ -657,12 +663,11 @@ describe('Shopping list interface', () => {
     await settle();
 
     const card = fixture.nativeElement.querySelector('.match-card') as HTMLElement;
-    expect(card.querySelector('.relationship-badge--match')?.textContent).toContain('Coincidencia');
-    expect(card.querySelector('.relationship-badge--alternative')?.textContent).toContain(
-      'Producto parecido',
-    );
+    expect(card.querySelector('.compact-offer-card--match')).not.toBeNull();
+    expect(card.querySelector('.compact-offer-card--alternative')).not.toBeNull();
+    expect(card.textContent).toContain('Coincidencia con Leche');
+    expect(card.textContent).toContain('Alternativa relacionada con Leche');
     expect(card.textContent).toContain('Fingers de pollo');
-    expect(card.textContent).toContain('Necesitarías 3 envases');
 
     button('También me sirve').click();
     await settle();
@@ -671,7 +676,7 @@ describe('Shopping list interface', () => {
       'product-lidl-fingers',
       'ACCEPTED',
     );
-    expect(button('✓ Lo tendremos en cuenta')).toBeDefined();
+    expect(button('Lo tendremos en cuenta')).toBeDefined();
     expect(api.serverCycle.items[0].name).toBe('Leche');
 
     button('No me interesa').click();
@@ -728,12 +733,70 @@ describe('Shopping list interface', () => {
     expect(fixture.nativeElement.querySelector('.shopping-list')).not.toBeNull();
   });
 
+  it('loads product images lazily and closes the accessible viewer with X, overlay, or Escape', async () => {
+    button('％ Ofertas').click();
+    await settle();
+
+    const image = fixture.nativeElement.querySelector('.offer-product-image') as HTMLImageElement;
+    expect(image.src).toBe('https://www.lidl.es/assets/leche-entera.png');
+    expect(image.getAttribute('loading')).toBe('lazy');
+    expect(image.getAttribute('decoding')).toBe('async');
+    expect(image.width).toBe(112);
+    expect(image.height).toBe(112);
+
+    const trigger = fixture.nativeElement.querySelector('.offer-image-button') as HTMLButtonElement;
+    trigger.click();
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const dialog = fixture.nativeElement.querySelector('.image-viewer-dialog') as HTMLElement;
+    const close = dialog.querySelector('.image-viewer-close') as HTMLButtonElement;
+    expect(dialog.getAttribute('role')).toBe('dialog');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(document.activeElement).toBe(close);
+    close.click();
+    await settle();
+    expect(fixture.nativeElement.querySelector('.image-viewer-dialog')).toBeNull();
+
+    trigger.click();
+    await settle();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle();
+    expect(fixture.nativeElement.querySelector('.image-viewer-dialog')).toBeNull();
+
+    trigger.click();
+    await settle();
+    (fixture.nativeElement.querySelector('.image-viewer-backdrop') as HTMLElement).click();
+    await settle();
+    expect(fixture.nativeElement.querySelector('.image-viewer-dialog')).toBeNull();
+  });
+
+  it('uses a quiet placeholder when a product has no image', async () => {
+    api.offerData[0].imageUrl = null;
+    button('％ Ofertas').click();
+    await settle();
+    expect(fixture.nativeElement.querySelector('.offer-product-image')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.offer-image-placeholder')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Imagen no disponible');
+  });
+
+  it('replaces a failed image with the placeholder without retrying', async () => {
+    api.offerData[0].imageUrl = 'https://www.lidl.es/assets/expired.png';
+    button('％ Ofertas').click();
+    await settle();
+    const image = fixture.nativeElement.querySelector('.offer-product-image') as HTMLImageElement;
+    image.dispatchEvent(new Event('error'));
+    await settle();
+    expect(fixture.nativeElement.querySelector('.offer-product-image')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.offer-image-placeholder')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Imagen no disponible');
+  });
+
   it('loads a selected offer category without refetching after list CRUD', async () => {
     button('％ Ofertas').click();
     await settle();
     button('🍎 Comida 1').click();
     await settle();
-    expect(api.getOffers.mock.calls.at(-1)?.slice(0, 2)).toEqual([undefined, 'FOOD']);
+    expect(api.getOffers.mock.calls.at(-1)?.slice(0, 2)).toEqual(['lidl', 'FOOD']);
 
     button('☷ Lista').click();
     fixture.detectChanges();
@@ -741,6 +804,22 @@ describe('Shopping list interface', () => {
     (fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement).click();
     await settle();
     expect(api.getOffers).toHaveBeenCalledTimes(callsBefore);
+  });
+
+  it('does not load offer images or OffersStore while adding and toggling list items', async () => {
+    expect(fixture.nativeElement.querySelectorAll('.offer-product-image')).toHaveLength(0);
+    expect(api.getOffers).not.toHaveBeenCalled();
+    const input = fixture.nativeElement.querySelector('#quick-name') as HTMLInputElement;
+    input.value = 'Yogur';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    button('Añadir').click();
+    await settle();
+    (fixture.nativeElement.querySelector('.item-toggle') as HTMLButtonElement).click();
+    await settle();
+
+    expect(api.getOffers).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelectorAll('.offer-product-image')).toHaveLength(0);
   });
 
   it('allows a suggested Lidl product to be confirmed without changing the list item', async () => {
@@ -754,7 +833,7 @@ describe('Shopping list interface', () => {
     expect(api.serverCycle.items[0].name).toBe('Leche');
   });
 
-  it('labels real Lidl data as Badajoz and never as demo', async () => {
+  it('labels real Lidl offers without prototype copy', async () => {
     api.offersMode = 'REAL';
     api.offerData[0].fixture = false;
     api.offerData[0].lidlPlusPriceCents = 79;
@@ -762,11 +841,11 @@ describe('Shopping list interface', () => {
     await settle();
 
     const text = ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/gu, ' ');
-    expect(text).toContain('Datos reales · Lidl');
+    expect(text).toContain('🔥 Ofertas Lidl');
     expect(text).toContain('Badajoz');
-    expect(text).toContain('Lidl Plus: 4,74');
-    expect(text).toContain('Tu precio: 5,34');
-    expect(text).toContain('Con Lidl Plus sería 4,74');
+    expect(text).toContain('Lidl Plus 0,79');
+    expect(text).not.toContain('Tu precio:');
+    expect(text).not.toContain('Datos reales');
     expect(text).not.toContain('Los precios no son datos comerciales reales');
   });
 
@@ -822,7 +901,7 @@ describe('Shopping list interface', () => {
     expect(fixture.nativeElement.textContent).toContain('No se pudo cargar Lidl Plus');
   });
 
-  it('uses Lidl Plus as Tu precio only after the household enables it', async () => {
+  it('keeps the compact Lidl Plus price after the household enables it', async () => {
     api.offersMode = 'REAL';
     api.offerData[0].fixture = false;
     api.offerData[0].lidlPlusPriceCents = 79;
@@ -835,9 +914,8 @@ describe('Shopping list interface', () => {
     await settle();
 
     const text = ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/gu, ' ');
-    expect(text).toContain('✓ Tu precio con Lidl Plus: 4,74');
-    expect(text).toContain('Ahorro adicional Lidl Plus: 0,60');
-    expect(text).not.toContain('Configúralo en Ajustes');
+    expect(text).toContain('Lidl Plus 0,79');
+    expect(text).not.toContain('Ahorro adicional Lidl Plus');
   });
 
   it('keeps the general offer as Tu precio when Lidl Plus is disabled', async () => {
@@ -853,9 +931,8 @@ describe('Shopping list interface', () => {
     await settle();
 
     const text = ((fixture.nativeElement as HTMLElement).textContent ?? '').replace(/\s+/gu, ' ');
-    expect(text).toContain('Lidl Plus: 4,74');
-    expect(text).toContain('Tu precio: 5,34');
-    expect(text).not.toContain('✓ Tu precio con Lidl Plus');
+    expect(text).toContain('Lidl Plus 0,79');
+    expect(text).not.toContain('Tu precio:');
   });
 
   it('refreshes the shared Lidl Plus setting after a remote settings event', async () => {

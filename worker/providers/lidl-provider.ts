@@ -211,10 +211,12 @@ const packageDetails = (value: string | undefined): { quantity?: number; unit?: 
 
 const safeImageUrl = (value: unknown): string | undefined => {
   const candidate = text(value);
-  if (!candidate) return undefined;
+  if (!candidate || candidate.length > 2048) return undefined;
   try {
     const url = new URL(candidate);
     return url.protocol === 'https:' &&
+      !url.username &&
+      !url.password &&
       ['www.lidl.es', 'imgproxy.leaflets.schwarz', 'lidl.media.schwarz'].includes(url.hostname)
       ? url.toString()
       : undefined;

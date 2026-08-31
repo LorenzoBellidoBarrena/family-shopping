@@ -91,10 +91,15 @@ en el último catálogo publicado, se omite y se reabre la generación de candid
 una ventaja mínima frente al segundo candidato se elige heurísticamente; `MEDIUM` se presenta como
 «¿Es alguno de estos?» y `LOW` se descarta.
 
-La UI abre con «Ofertas de tu lista», prioriza pendientes con oferta activa y conserva juntas las
-filas general y Lidl Plus de un mismo producto. A continuación muestra candidatos que requieren
-revisión, luego el resto de ofertas Lidl y finalmente las próximas. Una selección manual aprende
-para ciclos futuros; quitarla no modifica nunca el shopping item.
+La UI abre con «Para tu lista», prioriza pendientes con oferta activa y conserva juntas las filas
+general y Lidl Plus de un mismo producto. Después muestra el resto de ofertas Lidl y las próximas.
+Las cards ocultan métricas internas y usan imagen oficial, nombre, formato y precios; una selección
+manual aprende para ciclos futuros sin modificar nunca el shopping item.
+
+`image_url` viaja en las mismas consultas masivas del catálogo y matching. No abre una ruta, query
+o fetch por producto. El navegador solicita las imágenes oficiales sólo al renderizar Ofertas con
+lazy loading; la shell PWA no configura un grupo de caché externo para ellas y la Lista no depende
+de esos recursos.
 
 ### Alternativas semánticas de ofertas
 

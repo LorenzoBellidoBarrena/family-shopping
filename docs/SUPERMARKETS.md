@@ -12,6 +12,10 @@ La lista familiar no depende de este módulo. Cada proveedor implementa `Superma
 consulta con `Promise.allSettled`: si una cadena falla, las demás siguen respondiendo y la API marca
 el resultado como parcial.
 
+En la interfaz de Ofertas sólo Lidl está habilitado. Mercadona, Carrefour y DIA conservan contratos,
+datos y preferencias familiares, pero sus controles de catálogo están deshabilitados y no generan
+peticiones. Esto no impide escoger esas cadenas como supermercado preferido de un item.
+
 ## Modelo de datos
 
 - `stores`: tienda física o ámbito comercial; admite identificador externo y coordenadas.
@@ -23,6 +27,29 @@ el resultado como parcial.
 
 `store_products.catalog_status = PUBLISHED` significa únicamente «producto publicado» o
 «disponible en catálogo». No confirma existencias en tienda.
+
+`external_products.image_url` guarda únicamente la URL HTTPS oficial, nunca el binario. Lidl la
+obtiene de `data-grid-data` en la misma respuesta de campaña que el producto; no hay N+1, proxy ni
+descarga durante el Cron. Se aceptan sólo `www.lidl.es`, `imgproxy.leaflets.schwarz` y
+`lidl.media.schwarz`, sin credenciales y hasta 2.048 caracteres. Angular la enlaza con `[src]`, usa
+carga diferida y sustituye ausencia o error por un placeholder.
+
+La CSP comparte exactamente esa allowlist en `img-src`; no se añadió `https:` genérico ni un host
+externo. Una URL vigente de producción respondió `200 image/png` durante la validación del 31 de
+agosto de 2026.
+
+## Presentación de Ofertas
+
+La tarjeta compacta muestra foto, nombre, marca/formato y precios general, anterior y Lidl Plus
+cuando existen. Confidence, scoring, package fit, categorías internas, fuente, canal, fechas
+completas y desgloses extensos siguen disponibles en el dominio/API pero no se repiten en cada
+card. Una coincidencia usa un acento verde y una alternativa un acento naranja; ambas incluyen una
+descripción no visible para no depender sólo del color.
+
+La imagen abre un diálogo con `object-fit: contain`, cierre por X, fondo y Escape, foco inicial y
+bloqueo del scroll. No hay librería de zoom ni caché manual de binarios en IndexedDB/service worker.
+Las imágenes sólo se crean al entrar en Ofertas: abrir Lista, añadir o marcar no activa
+`OffersStore` ni descarga recursos Lidl.
 
 La categoría visual de la lista (`ProductCategory`, por ejemplo `DAIRY → 🥛`) no sustituye estas
 categorías comerciales. `external_products.category` conserva el texto del proveedor y
@@ -313,16 +340,14 @@ de producción terminó `SUCCESS` el 30 de agosto de 2026 a las `03:01:16.757Z`,
 
 ### Matching Lidl con la lista familiar
 
-La vista real añade primero «Ofertas de tu lista». Un candidato puede conservar simultáneamente su
-precio normal, oferta general y `LOYALTY_PRICE/LIDL_PLUS`; Lidl Plus siempre se muestra como una
-opción condicionada, no como el precio efectivo por defecto. El ahorro por envase se calcula en
-céntimos respecto a un precio anterior fiable; cuando el ajuste de cantidad es calculable, la capa
-posterior obtiene además los totales regular, oferta general y Lidl Plus para todos los envases.
+La vista real añade primero «Para tu lista». Un candidato conserva simultáneamente precio normal,
+oferta general y `LOYALTY_PRICE/LIDL_PLUS`, aunque la tarjeta sólo enseña el resumen útil. El ajuste
+de cantidad y los costes completos siguen calculándose y viajando en la API para aprendizaje y
+evolución futura, sin mostrarlos como métricas técnicas permanentes.
 
-Los candidatos `MEDIUM` aparecen bajo «Revisar productos relacionados» con acciones para confirmar
-o no relacionar automáticamente. El resto de promociones vigentes continúa en «Todas las ofertas
-Lidl» y las futuras permanecen en «Próximamente». Si no hay relación, sólo se muestra un mensaje
-discreto y el catálogo normal sigue visible. Los productos ya comprados no se priorizan.
+La confirmación de producto y el descarte automático conservan sus acciones breves. El resto de
+promociones vigentes aparece bajo «Ofertas» y las futuras permanecen en «Próximamente». Si no hay
+relación, el catálogo normal sigue visible. Los productos ya comprados no se priorizan.
 
 La primera revisión se realizó sobre 20 pares construidos con nombres del catálogo Lidl real
 vigente. Resultado: cero coincidencias absurdas `HIGH`; derivados como leche/batido,

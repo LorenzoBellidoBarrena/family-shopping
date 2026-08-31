@@ -92,6 +92,7 @@ const candidateDetails = (
     productName: product.name,
     normalizedProductName: product.normalizedName,
     brand: product.brand,
+    imageUrl: product.imageUrl,
     commercialCategory: product.commercialCategory,
     visualCategory: product.visualCategory,
     packageLabel: label,

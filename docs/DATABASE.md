@@ -23,7 +23,8 @@ de pruebas oficial de Workers y D1 local.
 - `household_loyalty_programs`: estado compartido de programas de fidelización por hogar.
 - `household_product_alternatives`: sustituciones de oferta aceptadas o descartadas por hogar.
 - `stores`: establecimientos o ámbitos comerciales, con geolocalización opcional.
-- `external_products`: catálogo publicado, EAN opcional, formato original y última observación.
+- `external_products`: catálogo publicado, EAN e imagen oficial opcionales, formato original y
+  última observación.
 - `product_aliases`: equivalencias léxicas globales y matches Lidl aprendidos aislados por hogar.
 - `store_products`: relación de publicación producto/tienda; no representa stock.
 - `product_prices`: histórico de precios en céntimos enteros.
