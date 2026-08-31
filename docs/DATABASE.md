@@ -146,6 +146,9 @@ desaparezca. La consulta de pantalla usa `household_product_alternatives_lookup_
 todas las preferencias del hogar en bloque; `EXPLAIN QUERY PLAN` confirmó ese índice. No se alteran
 items, ciclos, aliases ni catálogo.
 
+La ampliación de vocabulario (`PLATANO`, `BANANA`, `MANDARINA`, `CLEMENTINA`) no requiere migración:
+los códigos se validan en runtime y las filas aprendidas ya almacenan conceptos como texto estable.
+
 ## Atomicidad
 
 - Bootstrap: household, singleton, primer device y primer ciclo en un lote.

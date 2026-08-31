@@ -1,5 +1,20 @@
 # Progreso
 
+## Mejora local del AlternativeMatcher (31 de agosto de 2026, sin desplegar)
+
+- Reproducido el falso negativo `Plátano → Banana` antes del cambio.
+- Añadidos conceptos separados `PLATANO`, `BANANA`, `MANDARINA` y `CLEMENTINA`; identidad y
+  alternativa permanecen independientes.
+- Añadidas cuatro relaciones direccionales conservadoras: Plátano ↔ Banana y Mandarina ↔
+  Clementina. No se tocaron thresholds ni scores del matcher de identidad.
+- Corregido el alias plural `bananas` para normalizar a `banana`, sin convertirlo en `platano`.
+- Derivados como batido, yogur, smoothie, zumo, salsa, tarta y helado quedan fuera del concepto de fruta
+  cruda. Las relaciones declaran tipo interno, motivo y categorías de destino permitidas.
+- Auditados 98 productos Lidl reales en D1 local; muestra manual de 50 en
+  `docs/ALTERNATIVE_MATCHER_AUDIT.md`: 2 conceptos explícitos, 96 desconocidos y cero alternativas
+  absurdas. El snapshot actual no contiene plátano ni banana.
+- Producción, migraciones remotas, secrets y Cron no se modificaron.
+
 ## Fase actual: interfaz compacta de ofertas con imágenes Lidl
 
 Estado: Ofertas presenta únicamente datos Lidl útiles para compra, con tarjetas compactas e

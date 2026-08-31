@@ -267,7 +267,7 @@ describe('production hardening', () => {
 });
 
 describe('shopping list domain', () => {
-  it('keeps toggle isolated when the supermarket catalog contains 1,000 offers', async () => {
+  it('keeps add, toggle, edit, and delete isolated with 10 and 1,000 offers', async () => {
     const { token } = await bootstrap();
     const item = await addItem(token, 'Leche');
     await testEnv.DB.batch([
@@ -306,7 +306,22 @@ describe('shopping list domain', () => {
       `SELECT COUNT(*) AS count FROM offers WHERE id LIKE 'perf-offer-%'`,
     ).first<{ count: number }>();
     expect(initialOfferCount?.count).toBe(10);
+    const tenOfferItem = await addItem(token, 'Pan');
     expect((await toggleItem(token, item.id)).checked).toBe(true);
+    expect(
+      (
+        await readJson<ItemResponse>(
+          await api(`/api/items/${item.id}`, {
+            method: 'PATCH',
+            token,
+            body: { name: 'Leche entera' },
+          }),
+        )
+      ).item.name,
+    ).toBe('Leche entera');
+    expect((await api(`/api/items/${tenOfferItem.id}`, { method: 'DELETE', token })).status).toBe(
+      204,
+    );
 
     await testEnv.DB.prepare(
       `INSERT INTO offers
@@ -323,7 +338,22 @@ describe('shopping list domain', () => {
       `SELECT COUNT(*) AS count FROM offers WHERE id LIKE 'perf-offer-%'`,
     ).first<{ count: number }>();
     expect(expandedOfferCount?.count).toBe(1000);
+    const thousandOfferItem = await addItem(token, 'Yogur');
     expect((await toggleItem(token, item.id)).checked).toBe(false);
+    expect(
+      (
+        await readJson<ItemResponse>(
+          await api(`/api/items/${item.id}`, {
+            method: 'PATCH',
+            token,
+            body: { name: 'Leche semidesnatada' },
+          }),
+        )
+      ).item.name,
+    ).toBe('Leche semidesnatada');
+    expect(
+      (await api(`/api/items/${thousandOfferItem.id}`, { method: 'DELETE', token })).status,
+    ).toBe(204);
   });
 
   it('adds a product with precise quantity and a stable sort order', async () => {

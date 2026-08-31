@@ -108,6 +108,13 @@ thresholds `HIGH/MEDIUM/LOW` y responde «es el producto apuntado». El segundo 
 «podría sustituirlo» mediante `ProductConcept` y relaciones direccionales explícitas; nunca eleva
 una alternativa a match ni usa `ProductCategory` como identidad.
 
+La detección alternativa separa vocabulario (`TERM → ProductConcept`) de sustituciones
+(`ProductConcept → ProductConcept`). Singular, plural y acentos se normalizan sólo dentro del
+vocabulario conceptual. Las relaciones declaran además `CLOSE_SUBSTITUTE`,
+`PREPARATION_SUBSTITUTE` o `VARIANT_SUBSTITUTE` como semántica interna y categorías de destino
+permitidas. Por ejemplo, `PLATANO` y `BANANA` son conceptos distintos enlazados como sustitutos
+cercanos; nunca se convierten en aliases de identidad.
+
 Ambas capas comparten la misma lectura masiva del catálogo, ofertas y preferencias dentro de
 `GET /api/offers/for-list`. El matcher alternativo sólo considera ofertas vigentes ya persistidas en
 D1, excluye los candidatos verdes y limita el resultado a tres por item antes de serializar. No

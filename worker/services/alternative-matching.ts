@@ -2,6 +2,10 @@ import type { ProductCategory } from '../../src/shared/product-category';
 import { normalizeProductName } from '../../src/shared/product-name';
 
 export const PRODUCT_CONCEPTS = [
+  'PLATANO',
+  'BANANA',
+  'MANDARINA',
+  'CLEMENTINA',
   'NUGGETS',
   'CHICKEN_FINGERS',
   'BREADED_CHICKEN_STRIPS',
@@ -14,6 +18,16 @@ export const PRODUCT_CONCEPTS = [
 
 export type ProductConcept = (typeof PRODUCT_CONCEPTS)[number];
 export type AlternativeReason = 'HOUSEHOLD_ACCEPTED' | 'EXPLICIT_RELATION';
+export type AlternativeRelationType =
+  'CLOSE_SUBSTITUTE' | 'PREPARATION_SUBSTITUTE' | 'VARIANT_SUBSTITUTE';
+
+export interface ProductAlternativeRelation {
+  sourceConcept: ProductConcept;
+  targetConcept: ProductConcept;
+  type: AlternativeRelationType;
+  reason: string;
+  allowedTargetCategories: readonly ProductCategory[];
+}
 
 export interface AlternativeMatchResult {
   sourceConcept: ProductConcept;
@@ -23,47 +37,80 @@ export interface AlternativeMatchResult {
   reasons: AlternativeReason[];
 }
 
+const conceptTokenAliases: Readonly<Record<string, string>> = {
+  bananas: 'banana',
+  burgers: 'burger',
+  clementinas: 'clementina',
+  empanadas: 'empanada',
+  empanados: 'empanado',
+  fingers: 'finger',
+  hamburguesas: 'hamburguesa',
+  mandarinas: 'mandarina',
+  minis: 'mini',
+  nuggets: 'nugget',
+  patatas: 'patata',
+  platanos: 'platano',
+  rusticas: 'rustica',
+  tiras: 'tira',
+};
+
 const tokensOf = (value: string): Set<string> =>
-  new Set(normalizeProductName(value).split(' ').filter(Boolean));
+  new Set(
+    normalizeProductName(value)
+      .split(' ')
+      .filter(Boolean)
+      .map((token) => conceptTokenAliases[token] ?? token),
+  );
 
 const hasOne = (tokens: Set<string>, values: readonly string[]): boolean =>
   values.some((value) => tokens.has(value));
 
+const derivedFruitTerms = [
+  'batido',
+  'helado',
+  'salsa',
+  'smoothie',
+  'tarta',
+  'yogur',
+  'zumo',
+] as const;
+
+const rawFruitConcept = (tokens: Set<string>): ProductConcept | null => {
+  if (hasOne(tokens, derivedFruitTerms)) return null;
+  if (tokens.has('platano')) return 'PLATANO';
+  if (tokens.has('banana')) return 'BANANA';
+  if (tokens.has('mandarina')) return 'MANDARINA';
+  if (tokens.has('clementina')) return 'CLEMENTINA';
+  return null;
+};
+
 export const detectProductConcept = (normalizedName: string): ProductConcept | null => {
   const tokens = tokensOf(normalizedName);
-  if (hasOne(tokens, ['nugget', 'nuggets'])) return 'NUGGETS';
-  if (hasOne(tokens, ['finger', 'fingers']) && hasOne(tokens, ['pollo', 'chicken'])) {
+  const fruit = rawFruitConcept(tokens);
+  if (fruit) return fruit;
+  if (tokens.has('nugget')) return 'NUGGETS';
+  if (tokens.has('finger') && hasOne(tokens, ['pollo', 'chicken'])) {
     return 'CHICKEN_FINGERS';
   }
-  if (
-    hasOne(tokens, ['tira', 'tiras']) &&
-    tokens.has('pollo') &&
-    hasOne(tokens, ['empanada', 'empanadas', 'empanado', 'empanados'])
-  ) {
+  if (tokens.has('tira') && tokens.has('pollo') && hasOne(tokens, ['empanada', 'empanado'])) {
     return 'BREADED_CHICKEN_STRIPS';
   }
   if (tokens.has('burger') && tokens.has('meat')) return 'BURGER_MEAT';
-  if (
-    hasOne(tokens, ['mini', 'minis']) &&
-    hasOne(tokens, ['burger', 'burgers', 'hamburguesa', 'hamburguesas'])
-  ) {
+  if (tokens.has('mini') && hasOne(tokens, ['burger', 'hamburguesa'])) {
     return 'MINI_BURGER';
   }
-  if (
-    hasOne(tokens, ['patata', 'patatas']) &&
-    hasOne(tokens, ['gajo', 'gajos', 'rustica', 'rusticas'])
-  ) {
+  if (tokens.has('patata') && hasOne(tokens, ['gajo', 'gajos', 'rustica'])) {
     return 'POTATO_WEDGES';
   }
   if (
-    hasOne(tokens, ['patata', 'patatas']) &&
+    tokens.has('patata') &&
     hasOne(tokens, ['frita', 'fritas']) &&
     hasOne(tokens, ['congelada', 'congeladas', 'congelado', 'congelados'])
   ) {
     return 'FROZEN_FRIES';
   }
   if (
-    hasOne(tokens, ['hamburguesa', 'hamburguesas', 'burger', 'burgers']) &&
+    hasOne(tokens, ['hamburguesa', 'burger']) &&
     !hasOne(tokens, ['atun', 'pescado', 'vegetal', 'vegana', 'vegano'])
   ) {
     return 'BURGER';
@@ -71,30 +118,100 @@ export const detectProductConcept = (normalizedName: string): ProductConcept | n
   return null;
 };
 
-const ALTERNATIVE_RELATIONS: Readonly<Partial<Record<ProductConcept, readonly ProductConcept[]>>> =
-  {
-    NUGGETS: ['CHICKEN_FINGERS', 'BREADED_CHICKEN_STRIPS'],
-    CHICKEN_FINGERS: ['NUGGETS', 'BREADED_CHICKEN_STRIPS'],
-    BREADED_CHICKEN_STRIPS: ['NUGGETS', 'CHICKEN_FINGERS'],
-    BURGER: ['BURGER_MEAT', 'MINI_BURGER'],
-    BURGER_MEAT: ['BURGER', 'MINI_BURGER'],
-    MINI_BURGER: ['BURGER', 'BURGER_MEAT'],
-    FROZEN_FRIES: ['POTATO_WEDGES'],
-    POTATO_WEDGES: ['FROZEN_FRIES'],
-  };
+const relation = (
+  sourceConcept: ProductConcept,
+  targetConcept: ProductConcept,
+  type: AlternativeRelationType,
+  reason: string,
+  allowedTargetCategories: readonly ProductCategory[],
+): ProductAlternativeRelation => ({
+  sourceConcept,
+  targetConcept,
+  type,
+  reason,
+  allowedTargetCategories,
+});
 
-const incompatibleVisualCategories = new Set<ProductCategory>([
-  'DAIRY',
-  'FISH',
-  'DRINKS',
-  'WATER',
-  'COFFEE_TEA',
-  'SWEETS',
-  'CLEANING',
-  'HYGIENE',
-  'PAPER',
-  'PETS',
-]);
+const directions = (
+  left: ProductConcept,
+  right: ProductConcept,
+  type: AlternativeRelationType,
+  reason: string,
+  allowedTargetCategories: readonly ProductCategory[],
+): ProductAlternativeRelation[] => [
+  relation(left, right, type, reason, allowedTargetCategories),
+  relation(right, left, type, reason, allowedTargetCategories),
+];
+
+const preparedMeatCategories = ['MEAT', 'FROZEN', 'OTHER'] as const;
+const preparedPotatoCategories = ['VEGETABLES', 'FROZEN', 'OTHER'] as const;
+const fruitCategories = ['FRUIT'] as const;
+
+export const PRODUCT_ALTERNATIVE_RELATIONS: readonly ProductAlternativeRelation[] = [
+  ...directions(
+    'PLATANO',
+    'BANANA',
+    'CLOSE_SUBSTITUTE',
+    'Frutas frescas próximas, deliberadamente no idénticas.',
+    fruitCategories,
+  ),
+  ...directions(
+    'MANDARINA',
+    'CLEMENTINA',
+    'CLOSE_SUBSTITUTE',
+    'Cítricos frescos cotidianos próximos, deliberadamente no idénticos.',
+    fruitCategories,
+  ),
+  ...directions(
+    'NUGGETS',
+    'CHICKEN_FINGERS',
+    'PREPARATION_SUBSTITUTE',
+    'Preparados empanados de pollo de uso equivalente.',
+    preparedMeatCategories,
+  ),
+  ...directions(
+    'NUGGETS',
+    'BREADED_CHICKEN_STRIPS',
+    'PREPARATION_SUBSTITUTE',
+    'Preparados empanados de pollo de uso equivalente.',
+    preparedMeatCategories,
+  ),
+  ...directions(
+    'CHICKEN_FINGERS',
+    'BREADED_CHICKEN_STRIPS',
+    'PREPARATION_SUBSTITUTE',
+    'Preparados empanados de pollo de uso equivalente.',
+    preparedMeatCategories,
+  ),
+  ...directions(
+    'BURGER',
+    'BURGER_MEAT',
+    'VARIANT_SUBSTITUTE',
+    'Formatos próximos de carne para hamburguesa.',
+    preparedMeatCategories,
+  ),
+  ...directions(
+    'BURGER',
+    'MINI_BURGER',
+    'VARIANT_SUBSTITUTE',
+    'Formatos próximos de hamburguesa.',
+    preparedMeatCategories,
+  ),
+  ...directions(
+    'BURGER_MEAT',
+    'MINI_BURGER',
+    'VARIANT_SUBSTITUTE',
+    'Formatos próximos de carne para hamburguesa.',
+    preparedMeatCategories,
+  ),
+  ...directions(
+    'FROZEN_FRIES',
+    'POTATO_WEDGES',
+    'VARIANT_SUBSTITUTE',
+    'Guarniciones congeladas de patata de formato próximo.',
+    preparedPotatoCategories,
+  ),
+];
 
 export const matchProductAlternative = (
   shoppingName: string,
@@ -105,8 +222,12 @@ export const matchProductAlternative = (
   const sourceConcept = detectProductConcept(shoppingName);
   const targetConcept = detectProductConcept(candidateName);
   if (!sourceConcept || !targetConcept || sourceConcept === targetConcept) return null;
-  if (!(ALTERNATIVE_RELATIONS[sourceConcept] ?? []).includes(targetConcept)) return null;
-  if (incompatibleVisualCategories.has(candidateCategory)) return null;
+  const configuredRelation = PRODUCT_ALTERNATIVE_RELATIONS.find(
+    (candidate) =>
+      candidate.sourceConcept === sourceConcept && candidate.targetConcept === targetConcept,
+  );
+  if (!configuredRelation) return null;
+  if (!configuredRelation.allowedTargetCategories.includes(candidateCategory)) return null;
 
   const accepted = acceptedTargetConcept === targetConcept;
   return {

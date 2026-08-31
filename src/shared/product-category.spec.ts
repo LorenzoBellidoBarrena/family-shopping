@@ -6,6 +6,8 @@ describe('product category configuration and classifier', () => {
     ['leche', 'DAIRY'],
     ['yogures', 'DAIRY'],
     ['pan', 'BAKERY'],
+    ['banana granel', 'FRUIT'],
+    ['clementina malla', 'FRUIT'],
     ['tomates', 'VEGETABLES'],
     ['huevos', 'EGGS'],
     ['cafe', 'COFFEE_TEA'],

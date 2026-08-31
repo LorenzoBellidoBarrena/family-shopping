@@ -30,7 +30,7 @@ export const MATCH_STOP_WORDS = new Set([
 ]);
 
 const tokenAliases: Readonly<Record<string, string>> = {
-  bananas: 'platano',
+  bananas: 'banana',
   cebollas: 'cebolla',
   croquetas: 'croqueta',
   huevos: 'huevo',

@@ -192,6 +192,10 @@ export interface ListMatchCandidate {
 }
 
 export type ProductConcept =
+  | 'PLATANO'
+  | 'BANANA'
+  | 'MANDARINA'
+  | 'CLEMENTINA'
   | 'NUGGETS'
   | 'CHICKEN_FINGERS'
   | 'BREADED_CHICKEN_STRIPS'

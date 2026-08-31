@@ -359,8 +359,15 @@ pan/pan bocadillo permanecieron `MEDIUM`. El score de identidad no cambia con la
 Las coincidencias verdes continúan siendo identidad. Las sugerencias naranjas son sustituciones
 distintas y sólo se generan mediante relaciones explícitas entre conceptos: Nuggets ↔ Fingers de
 pollo/Tiras de pollo empanadas, Hamburguesa ↔ Burger meat/Mini burger y Patatas fritas congeladas
-↔ Patatas gajo. El modelo guarda dirección para no asumir simetría futura, aunque el diccionario
-inicial permite ambos sentidos en estos casos concretos.
+↔ Patatas gajo. La revisión local añade Plátano ↔ Banana y Mandarina ↔ Clementina como sustitutos
+cercanos, manteniendo cada fruta como concepto distinto. El modelo guarda dirección para no asumir
+simetría futura, aunque el diccionario actual declara ambos sentidos en estos casos concretos.
+
+El vocabulario conceptual maneja acentos y plurales sin compartir aliases con identidad. Palabras
+de presentación (`granel`, `malla`, `bio`) no impiden detectar la fruta, mientras derivados como
+batido, yogur, smoothie, zumo, salsa, tarta o helado bloquean el concepto de fruta cruda. La categoría
+visual funciona únicamente como filtro de seguridad. La auditoría reproducible y su muestra de 50
+productos reales se documentan en `docs/ALTERNATIVE_MATCHER_AUDIT.md`.
 
 Sólo se devuelven productos con oferta vigente del último catálogo D1 válido, máximo tres por item.
 Se reutilizan precio efectivo, Lidl Plus y cálculo de envases. Compartir categoría visual o

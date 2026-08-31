@@ -132,6 +132,10 @@ añade `relationship: "ALTERNATIVE"`, `sourceConcept`, `targetConcept`, `alterna
 `alternativeReasons` y `learned`. Match y alternativa pueden coexistir; si no existe oferta de
 identidad, el item se devuelve igualmente cuando existe una sustitución útil.
 
+Los contratos `ProductConcept` incluyen conceptos distintos para `PLATANO`, `BANANA`, `MANDARINA`
+y `CLEMENTINA`. Por tanto `Plátano → Plátano de Canarias` permanece en `candidates`, mientras
+`Plátano → Banana` sólo puede aparecer en `alternatives`; compartir `FRUIT` nunca basta por sí solo.
+
 `PUT /api/items/:id/product-alternative` recibe:
 
 ```json

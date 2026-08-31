@@ -454,6 +454,79 @@ describe('ListOfferMatchingService', () => {
     ]);
   });
 
+  it('returns Plátano de Canarias as identity and Banana as a separate active alternative', async () => {
+    await createHousehold('house-a', {
+      name: 'Plátano',
+      normalizedName: 'platano',
+      category: 'FRUIT',
+    });
+    const fruit = { category: 'Frutas y hortalizas/Fruta', visualCategory: 'FRUIT' };
+    await createProduct('canary-plantain', 'Plátano de Canarias', 249, true, fruit);
+    await createProduct('banana', 'Banana granel', 199, true, fruit);
+    await createProduct('apple', 'Manzana golden', 189, true, fruit);
+
+    const result = await service().list(device('house-a'));
+
+    expect(
+      result.matchedItems[0].candidates.map((candidate) => candidate.externalProductId),
+    ).toEqual(['canary-plantain']);
+    expect(result.matchedItems[0].alternatives).toEqual([
+      expect.objectContaining({
+        externalProductId: 'banana',
+        relationship: 'ALTERNATIVE',
+        sourceConcept: 'PLATANO',
+        targetConcept: 'BANANA',
+      }),
+    ]);
+  });
+
+  it('shows only the active Banana alternative when the Plátano identity has no offer', async () => {
+    await createHousehold('house-a', {
+      name: 'Plátanos',
+      normalizedName: 'platanos',
+      category: 'FRUIT',
+    });
+    const fruit = { category: 'Frutas y hortalizas/Fruta', visualCategory: 'FRUIT' };
+    await createProduct('canary-plantain', 'Plátano de Canarias', 249, false, fruit);
+    await createProduct('banana-active', 'Banana granel', 199, true, fruit);
+    await createProduct('banana-no-offer', 'Bananas bio', 229, false, fruit);
+
+    const result = await service().list(device('house-a'));
+
+    expect(
+      result.matchedItems[0].candidates.filter((candidate) => candidate.activeOffers.length > 0),
+    ).toEqual([]);
+    expect(
+      result.matchedItems[0].alternatives.map((candidate) => candidate.externalProductId),
+    ).toEqual(['banana-active']);
+  });
+
+  it('learns and dismisses Banana for Plátano by concept rather than by one SKU', async () => {
+    await createHousehold('house-a', {
+      name: 'Plátano',
+      normalizedName: 'platano',
+      category: 'FRUIT',
+    });
+    const fruit = { category: 'Frutas y hortalizas/Fruta', visualCategory: 'FRUIT' };
+    await createProduct('banana-a', 'Banana granel', 199, true, fruit);
+    await createProduct('banana-b', 'Bananas premium', 229, true, fruit);
+    const matching = service();
+
+    await matching.saveAlternative(device('house-a'), 'item-house-a', 'banana-a', 'ACCEPTED');
+    let result = await matching.list(device('house-a'));
+    expect(result.matchedItems[0].alternatives).toEqual([
+      expect.objectContaining({ externalProductId: 'banana-a', learned: true, preferred: true }),
+      expect.objectContaining({ externalProductId: 'banana-b', learned: true, preferred: false }),
+    ]);
+
+    await matching.saveAlternative(device('house-a'), 'item-house-a', 'banana-b', 'DISMISSED');
+    result = await matching.list(device('house-a'));
+    expect(result.matchedItems).toEqual([]);
+    expect(result.unmatchedItems).toEqual([
+      expect.objectContaining({ shoppingItemId: 'item-house-a', reason: 'NO_CANDIDATE' }),
+    ]);
+  });
+
   it('returns only an alternative when there is no identity offer and excludes products without offers', async () => {
     await createHousehold('house-a', {
       name: 'Nuggets',

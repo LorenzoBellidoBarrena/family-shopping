@@ -63,6 +63,15 @@ describe('explainable product matching', () => {
     expect(score('tomates', product('tomate pera', 'VEGETABLES'), 'VEGETABLES').confidence).toBe(
       'MEDIUM',
     );
+    expect(score('banana', product('bananas granel', 'FRUIT'), 'FRUIT').confidence).toBe('MEDIUM');
+  });
+
+  it('keeps plátano and banana as different identity concepts', () => {
+    expect(score('plátano', product('plátano de canarias', 'FRUIT'), 'FRUIT').confidence).toBe(
+      'MEDIUM',
+    );
+    expect(score('plátano', product('banana granel', 'FRUIT'), 'FRUIT').confidence).toBe('LOW');
+    expect(score('plátano', product('bananas granel', 'FRUIT'), 'FRUIT').confidence).toBe('LOW');
   });
 
   it('supports the explicit papel wc and cola phrase aliases', () => {
