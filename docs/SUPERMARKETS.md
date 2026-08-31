@@ -329,6 +329,26 @@ vigente. Resultado: cero coincidencias absurdas `HIGH`; derivados como leche/bat
 pollo/croquetas, tomate/salsa y atún/burger quedaron `LOW`, mientras términos genéricos válidos como
 pan/pan bocadillo permanecieron `MEDIUM`. El score de identidad no cambia con la cantidad.
 
+### Alternativas similares Lidl
+
+Las coincidencias verdes continúan siendo identidad. Las sugerencias naranjas son sustituciones
+distintas y sólo se generan mediante relaciones explícitas entre conceptos: Nuggets ↔ Fingers de
+pollo/Tiras de pollo empanadas, Hamburguesa ↔ Burger meat/Mini burger y Patatas fritas congeladas
+↔ Patatas gajo. El modelo guarda dirección para no asumir simetría futura, aunque el diccionario
+inicial permite ambos sentidos en estos casos concretos.
+
+Sólo se devuelven productos con oferta vigente del último catálogo D1 válido, máximo tres por item.
+Se reutilizan precio efectivo, Lidl Plus y cálculo de envases. Compartir categoría visual o
+comercial nunca basta: croquetas, batidos, salsa de tomate, burger de atún y albóndigas quedan fuera
+si no existe una relación explícita.
+
+«También me sirve» guarda `ACCEPTED` por hogar y concepto; «No me interesa» guarda `DISMISSED` para
+ese concepto. Ninguna acción modifica la lista ni crea un alias `CONFIRMED`. En el catálogo local
+real observado el 30 de agosto aparecieron Fingers de pollo (4,15 € normal, 3,73 € general, 3,32 €
+Lidl Plus) y Burger meat picada mixta (6,75 €, 6,07 €, 5,40 €); no había Nuggets, Tiras ni Mini
+burger publicados, por lo que el resto de cobertura positiva usa datos sintéticos declarados en
+tests.
+
 ### Cantidades, formatos y costes
 
 El formato original se conserva como `package_description` y se interpreta después del matching de

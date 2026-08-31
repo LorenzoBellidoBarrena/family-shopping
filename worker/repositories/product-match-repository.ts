@@ -1,5 +1,5 @@
 import type { ProductCategory } from '../../src/shared/product-category';
-import type { ProductConcept } from '../services/alternative-matching';
+import { isProductConcept, type ProductConcept } from '../services/alternative-matching';
 
 export interface CatalogProductForMatching {
   externalProductId: string;
@@ -156,18 +156,24 @@ export class ProductMatchRepository {
       .bind(householdId)
       .all<{
         normalized_name: string;
-        source_concept: ProductConcept;
-        target_concept: ProductConcept;
+        source_concept: string;
+        target_concept: string;
         preferred_external_product_id: string | null;
         status: 'ACCEPTED' | 'DISMISSED';
       }>();
-    return results.map((row) => ({
-      normalizedName: row.normalized_name,
-      sourceConcept: row.source_concept,
-      targetConcept: row.target_concept,
-      preferredExternalProductId: row.preferred_external_product_id,
-      status: row.status,
-    }));
+    return results.flatMap((row) =>
+      isProductConcept(row.source_concept) && isProductConcept(row.target_concept)
+        ? [
+            {
+              normalizedName: row.normalized_name,
+              sourceConcept: row.source_concept,
+              targetConcept: row.target_concept,
+              preferredExternalProductId: row.preferred_external_product_id,
+              status: row.status,
+            },
+          ]
+        : [],
+    );
   }
 
   async confirm(

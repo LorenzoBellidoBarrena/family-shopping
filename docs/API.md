@@ -124,6 +124,27 @@ Los items con supermercado `LIDL`, `ANY` o sin supermercado pueden considerar Li
 preferencia explícita por Mercadona, Carrefour o DIA no se cambia ni se utiliza para sugerir Lidl
 en esta primera versión.
 
+### Alternativas de oferta
+
+Cada elemento de `matchedItems` incluye dos colecciones distintas: `candidates` contiene identidad
+`MATCH` y `alternatives` contiene como máximo tres sustituciones con oferta activa. Una alternativa
+añade `relationship: "ALTERNATIVE"`, `sourceConcept`, `targetConcept`, `alternativeStrength`,
+`alternativeReasons` y `learned`. Match y alternativa pueden coexistir; si no existe oferta de
+identidad, el item se devuelve igualmente cuando existe una sustitución útil.
+
+`PUT /api/items/:id/product-alternative` recibe:
+
+```json
+{
+  "externalProductId": "producto-lidl",
+  "status": "ACCEPTED"
+}
+```
+
+`status` admite `ACCEPTED` o `DISMISSED`. El Worker obtiene el hogar del device token y deriva y
+valida ambos conceptos contra el diccionario explícito. Responde `{ "saved": true }`; no renombra,
+reemplaza ni marca el shopping item y no escribe un alias de identidad `CONFIRMED`.
+
 ## Programas de fidelización
 
 `GET /api/settings/loyalty-programs` devuelve actualmente `LIDL_PLUS`. La ausencia de una fila se

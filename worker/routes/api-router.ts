@@ -194,6 +194,7 @@ export const routeApi = async (
       externalProductId,
       status,
     );
+    realtime.publish(device, 'SETTINGS_UPDATED', { alternativePreference: true });
     return jsonResponse({ saved: true });
   }
 

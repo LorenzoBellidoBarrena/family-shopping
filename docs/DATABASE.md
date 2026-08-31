@@ -3,8 +3,9 @@
 Las migraciones son `0001_initial_schema.sql`, `0002_realtime_revisions.sql`,
 `0003_supermarket_catalog.sql`, `0004_product_categories.sql`,
 `0005_carrefour_import_foundation.sql`, `0006_nullable_offer_validity.sql`,
-`0007_household_product_matches.sql`, `0008_package_descriptions.sql` y
-`0009_household_loyalty_programs.sql`. Se validan con el runtime
+`0007_household_product_matches.sql`, `0008_package_descriptions.sql`,
+`0009_household_loyalty_programs.sql`, `0010_offer_browse_categories_and_query_indexes.sql` y
+`0011_household_product_alternatives.sql`. Se validan con el runtime
 de pruebas oficial de Workers y D1 local.
 
 ## Tablas
@@ -20,6 +21,7 @@ de pruebas oficial de Workers y D1 local.
 - `pairing_codes`: hashes de códigos temporales, expiración y marca de uso.
 - `household_revisions`: secuencia creciente de eventos de sincronización por hogar.
 - `household_loyalty_programs`: estado compartido de programas de fidelización por hogar.
+- `household_product_alternatives`: sustituciones de oferta aceptadas o descartadas por hogar.
 - `stores`: establecimientos o ámbitos comerciales, con geolocalización opcional.
 - `external_products`: catálogo publicado, EAN opcional, formato original y última observación.
 - `product_aliases`: equivalencias léxicas globales y matches Lidl aprendidos aislados por hogar.
@@ -131,6 +133,18 @@ ninguna fila: ausencia equivale al default seguro `UNKNOWN`.
 No se almacenan identificadores personales ni credenciales de supermercados. El precio efectivo y
 los ahorros se derivan en runtime y no sustituyen precios, ofertas ni histórico.
 
+## Alternativas aprendidas
+
+`0011_household_product_alternatives.sql` crea una tabla separada porque el índice de
+`product_aliases` permite un único match por `(household, nombre, supermercado)`, mientras una
+intención puede aceptar varios conceptos alternativos sin convertir ninguno en identidad.
+
+La clave única añade `target_concept`; `status` sólo admite `ACCEPTED` o `DISMISSED` y
+`preferred_external_product_id` usa `ON DELETE SET NULL`. Así se conserva el concepto aunque el SKU
+desaparezca. La consulta de pantalla usa `household_product_alternatives_lookup_idx` para cargar
+todas las preferencias del hogar en bloque; `EXPLAIN QUERY PLAN` confirmó ese índice. No se alteran
+items, ciclos, aliases ni catálogo.
+
 ## Atomicidad
 
 - Bootstrap: household, singleton, primer device y primer ciclo en un lote.
@@ -152,5 +166,5 @@ persistencia de matching familiar, `0008` conserva la descripción del envase y 
 preferencia loyalty compartida; ninguna altera items, ciclos, precios u ofertas. Los fixtures viven
 sólo en código/pruebas y nunca se cargan mediante una migración.
 
-Las migraciones `0001`–`0009` están aplicadas tanto en D1 local como en
-`family-shopping-db` remota; no quedan migraciones pendientes al cierre del 30 de agosto de 2026.
+Las migraciones `0001`–`0011` están aplicadas tanto en D1 local como en
+`family-shopping-db` remota; no quedan migraciones pendientes al cierre del 31 de agosto de 2026.

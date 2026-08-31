@@ -495,6 +495,7 @@ export class ShoppingStore {
 
   private async refreshLoyaltyAfterRemoteChange(): Promise<void> {
     await this.loadLoyaltyPrograms();
+    this.listVersionState.update((version) => version + 1);
   }
 
   private updateItems(update: (items: ShoppingItem[]) => ShoppingItem[]): void {

@@ -1,6 +1,40 @@
 # Progreso
 
-## Fase actual: configuración familiar Lidl Plus y precio efectivo
+## Fase actual: alternativas similares de ofertas Lidl
+
+Estado: la aplicación distingue matches verdes de identidad y alternativas naranjas de
+sustitución. El diccionario inicial es pequeño, explícito y conservador; aceptación y descarte son
+por hogar y concepto, sin modificar la lista ni su ruta crítica.
+
+### Alternativas implementadas
+
+- `AlternativeMatcher` separado del matcher de identidad validado; no cambian scores ni thresholds.
+- Conceptos Nuggets/Fingers/Tiras, Hamburguesa/Burger meat/Mini burger y Patatas congeladas/Patatas
+  gajo, unidos sólo por relaciones direccionales explícitas.
+- Sólo ofertas activas del catálogo D1, sin fetch remoto, máximo tres, misma lógica de envase,
+  promoción, Lidl Plus y precio efectivo.
+- Migración aditiva `0011_household_product_alternatives.sql`: `ACCEPTED`/`DISMISSED` por hogar,
+  nombre y concepto; SKU opcional para prioridad, no como identidad permanente.
+- UI verde «✓ Coincidencia» y naranja «≈ Producto parecido», con estado optimista, rollback,
+  semántica accesible y caso útil sin match exacto.
+- Caché y cancelación permanecen en `OffersStore`; CRUD y `ShoppingStore` no invocan el matcher
+  alternativo. La prueba de aislamiento conserva toggles idénticos con 10 y 1.000 ofertas.
+- Revisión conservadora de 20 pares: 20/20, cero alternativas absurdas. El catálogo real local
+  aportó Fingers de pollo y Burger meat; los restantes casos positivos son sintéticos declarados.
+- Despliegue de cierre del 31 de agosto de 2026: versión
+  `2e2a6ec3-64d6-437e-84f4-a8c18c89cfd9`, migraciones `0001`–`0011` sin pendientes y 259 tests
+  PASS. Shell, `/pair`, health, PWA y gates privados respondieron correctamente; WebSocket sin
+  upgrade devolvió el `426` esperado. Los triggers continúan exactamente `0 3 * * *` y
+  `0 4 * * *`.
+- Conteos seguros tras deploy: 1 hogar, 2 dispositivos, 1 ciclo activo, 7 items y 7 preferencias,
+  idénticos al estado previo. Para 6 pendientes, la revisión agregada conservadora encontró 2
+  matches verdes y 0 alternativas naranjas vigentes; no se expuso ni modificó contenido familiar.
+- El import programado del 31 de agosto fue `PARTIAL` (27 productos/27 precios/19 ofertas) por
+  `LIDL_RESPONSE_TOO_LARGE`; mantuvo el último dataset válido. La campaña vigente contiene Nuggets
+  reales, pero no simultáneamente Fingers/Tiras activos, por lo que hoy no corresponde fabricar una
+  tarjeta naranja.
+
+## Fase anterior: configuración familiar Lidl Plus y precio efectivo
 
 Estado: cada hogar puede declarar si utiliza Lidl Plus y el Worker selecciona el menor precio
 inmediato realmente aplicable sin perder normal, oferta general, loyalty ni desglose. Identidad,

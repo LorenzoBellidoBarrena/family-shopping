@@ -37,6 +37,7 @@ export class OffersStore {
   private matchingCache: { key: string; result: ListOfferMatchesResponse } | null = null;
   private controller: AbortController | null = null;
   private requestVersion = 0;
+  private alternativePreferenceVersion = 0;
 
   readonly offers = this.currentOffers.asReadonly();
   readonly offerMatches = this.currentMatches.asReadonly();
@@ -73,7 +74,7 @@ export class OffersStore {
     const requestVersion = ++this.requestVersion;
     const loyaltyStatus = this.shopping.lidlPlusStatus();
     const catalogKey = `${supermarket ?? 'all'}:${category ?? 'all'}:${loyaltyStatus}`;
-    const matchingKey = `${this.shopping.listVersion()}:${loyaltyStatus}`;
+    const matchingKey = `${this.shopping.listVersion()}:${loyaltyStatus}:${this.alternativePreferenceVersion}`;
     this.loadingState.set(true);
     this.errorState.set(null);
 
@@ -175,7 +176,7 @@ export class OffersStore {
   private async refreshMatching(): Promise<void> {
     this.matchingCache = null;
     const result = await this.api.getListOfferMatches();
-    const key = `${this.shopping.listVersion()}:${this.shopping.lidlPlusStatus()}`;
+    const key = `${this.shopping.listVersion()}:${this.shopping.lidlPlusStatus()}:${this.alternativePreferenceVersion}`;
     this.matchingCache = { key, result };
     this.applyMatching(result);
   }
@@ -194,6 +195,8 @@ export class OffersStore {
     const key = `${itemId}:${externalProductId}`;
     if (this.savingAlternativeKeys().has(key)) return;
     const previous = this.currentMatches();
+    const previousPreferenceVersion = this.alternativePreferenceVersion;
+    this.alternativePreferenceVersion += 1;
     const optimistic = previous.map((match) => {
       if (match.shoppingItemId !== itemId) return match;
       return {
@@ -217,6 +220,7 @@ export class OffersStore {
     try {
       await this.api.saveProductAlternative(itemId, externalProductId, status);
     } catch (error) {
+      this.alternativePreferenceVersion = previousPreferenceVersion;
       this.currentMatches.set(previous);
       this.updateMatchingCache(previous);
       this.errorState.set(
@@ -234,7 +238,7 @@ export class OffersStore {
   private updateMatchingCache(matches: ShoppingItemOfferMatch[]): void {
     if (!this.matchingCache) return;
     this.matchingCache = {
-      ...this.matchingCache,
+      key: `${this.shopping.listVersion()}:${this.shopping.lidlPlusStatus()}:${this.alternativePreferenceVersion}`,
       result: { ...this.matchingCache.result, matchedItems: matches },
     };
   }
